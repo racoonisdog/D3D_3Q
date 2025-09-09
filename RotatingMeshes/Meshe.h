@@ -11,13 +11,13 @@ struct Vertex
 	Vertex(Vector3 _position, Vector4 _color) : position(_position), color(_color) {};
 };
 
-struct Constant
+struct alignas(16) Constant
 {
-	DirectX::XMMATRIX world;
-	DirectX::XMMATRIX view;				
-	DirectX::XMMATRIX projection;
+	XMFLOAT4X4 world;
+	XMFLOAT4X4 view;
+	XMFLOAT4X4 projection;
 };
-
+static_assert(sizeof(Constant) % 16 == 0, "CB must be 16B-aligned");
 
 class Meshe : public GameApp
 {
@@ -46,7 +46,7 @@ public:
 
 
 	//world 관련 변수 ( 자식 추가 해야함 )
-	XMFLOAT3 P_position{ 0.0f, 0.0f, 0.0f };
+	XMFLOAT3 P_position{ 0.0f, 0.0f, 5.0f };
 	XMFLOAT3 P_rotation{ 0.0f, 0.0f, 0.0f };
 	XMFLOAT3 P_Scale{ 1.0f, 1.0f, 1.0f };
 
@@ -71,6 +71,7 @@ public:
 		zNear,
 		zFar
 	);
+
 
 	//update를 위해 맴버변수로 둠
 	Constant constandices{};

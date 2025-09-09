@@ -1,6 +1,6 @@
 #include "Shared.fxh"
 
-float4 main(PS_INPUT input) : SV_TARGET
+float4 main(VertexOut pIn) : SV_TARGET
 {
-    return input.color;
+    return pIn.color;
 }

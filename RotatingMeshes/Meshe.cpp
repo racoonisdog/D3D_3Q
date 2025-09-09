@@ -46,7 +46,8 @@ bool Meshe::Initialize(UINT Width, UINT Height)
 
 void Meshe::Update()
 {
-	P_rotation.y += 1.0f;
+	__super::Update();
+	/*P_rotation.y += 0.01f;;
 
 	XMMATRIX scaleMat = XMMatrixScaling(P_Scale.x, P_Scale.y, P_Scale.z);
 	XMMATRIX rotMat = XMMatrixRotationRollPitchYaw(P_rotation.x, P_rotation.y, P_rotation.z);
@@ -54,9 +55,18 @@ void Meshe::Update()
 
 	P_world = scaleMat * rotMat * transMat;
 
-	constandices.world = XMMatrixTranspose(P_world);
+	XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(P_world));*/
 	/*constandices.view = XMMatrixTranspose(view);*/
-	constandices.projection = XMMatrixTranspose(m_projection);
+	/*constandices.projection = XMMatrixTranspose(m_projection);*/
+	P_rotation.y += 0.01f;
+	P_rotation.x += 0.013f;
+	XMMATRIX S = XMMatrixScaling(P_Scale.x, P_Scale.y, P_Scale.z);
+	XMMATRIX R = XMMatrixRotationRollPitchYaw(P_rotation.x, P_rotation.y, P_rotation.z);
+	XMMATRIX T = XMMatrixTranslation(P_position.x, P_position.y, P_position.z);
+	XMMATRIX W = S * R * T;
+
+	//Transpose 해서 XMFLOAT4X4에 저장
+	XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(W));
 }
 
 void Meshe::Render()
@@ -243,42 +253,24 @@ bool Meshe::InitScene()
 		pixelShaderBuffer->GetBufferSize(), NULL, &m_pPixelShader));
 	SAFE_RELEASE(pixelShaderBuffer); // 복사했으니 버퍼는 해제 가능
 
-	//컬링끄는법
-	//index 순서대로 그릴때 앞면/뒷면이 정해짐( 시계 , 반시계 )
-	// 컬링을 끄지 않으면 뒷면은 최적화, 조명, 충돌방지등을 위해 그려지지 않음
-	// 컬링을 끄거나 앞면으로 그리는 index를 준비하면됨
-	// 1. 래스터라이저 상태 구조체 준비
-	/*D3D11_RASTERIZER_DESC rsDesc = {};
-	rsDesc.FillMode = D3D11_FILL_SOLID;   // 실선으로 렌더링
-	rsDesc.CullMode = D3D11_CULL_NONE;    // 컬링 off
-	rsDesc.FrontCounterClockwise = FALSE; // 기본 CCW = 앞면
-	rsDesc.DepthClipEnable = TRUE;
-
-	// 2. 래스터라이저 상태 생성
-	ID3D11RasterizerState* pRasterizerState = nullptr;
-	hr = m_pDevice->CreateRasterizerState(&rsDesc, &pRasterizerState);
-
-	// 3. 컨텍스트에 바인딩
-	if (SUCCEEDED(hr))
-	{
-		m_pDeviceContext->RSSetState(pRasterizerState);
-	}
-
-	// 4. 다 쓰고 해제
-	SAFE_RELEASE(pRasterizerState);
-	*/
-
-
 	/*Constant constandices{};*/
-	constandices.world = P_world;
+	float aspect = float(1024.0f) / float(768.0f);
+	XMMATRIX proj = XMMatrixPerspectiveFovLH(XMConvertToRadians(60.0f), aspect, 0.1f, 1000.0f);
+	XMStoreFloat4x4(&constandices.projection, XMMatrixTranspose(proj));
 
+	// 뷰 (한 번만)
 	XMVECTOR eye = XMVectorSet(0, 0, -3, 0);
 	XMVECTOR target = XMVectorSet(0, 0, 0, 0);
 	XMVECTOR up = XMVectorSet(0, 1, 0, 0);
 	XMMATRIX view = XMMatrixLookAtLH(eye, target, up);
+	XMStoreFloat4x4(&constandices.view, XMMatrixTranspose(view));
 
-	constandices.view = XMMatrixTranspose(view);
-	constandices.projection = m_projection;
+	// 월드 (매 프레임)
+	XMMATRIX S = XMMatrixScaling(P_Scale.x, P_Scale.y, P_Scale.z);
+	XMMATRIX R = XMMatrixRotationRollPitchYaw(P_rotation.x, P_rotation.y, P_rotation.z);
+	XMMATRIX T = XMMatrixTranslation(P_position.x, P_position.y, P_position.z);
+	XMMATRIX W = S * R * T;
+	XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(W));
 	
 
 	D3D11_BUFFER_DESC cbDesc{};
@@ -296,7 +288,7 @@ bool Meshe::InitScene()
 	cbDesc.MiscFlags = 0;
 	cbDesc.StructureByteStride = 0;
 
-	D3D11_SUBRESOURCE_DATA idData = {};
+	D3D11_SUBRESOURCE_DATA idDataP{};
 	idData.pSysMem = indices;	// 버퍼를 생성할때 복사할 데이터의 주소 설정 
 	HR_T(hr = m_pDevice->CreateBuffer(&cbDesc, nullptr, &m_pConstantBuffer));
 
