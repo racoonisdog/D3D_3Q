@@ -7,6 +7,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Common", "Common\Common.vcx
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TestMy", "TestMy\TestMy.vcxproj", "{29C8FE41-93E9-405E-9EF9-E03550ED3504}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "RotatingMeshes", "RotatingMeshes\RotatingMeshes.vcxproj", "{3C2CD33E-5300-46F0-9EDF-E4ECFC6CD37D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -31,6 +33,14 @@ Global
 		{29C8FE41-93E9-405E-9EF9-E03550ED3504}.Release|x64.Build.0 = Release|x64
 		{29C8FE41-93E9-405E-9EF9-E03550ED3504}.Release|x86.ActiveCfg = Release|Win32
 		{29C8FE41-93E9-405E-9EF9-E03550ED3504}.Release|x86.Build.0 = Release|Win32
+		{3C2CD33E-5300-46F0-9EDF-E4ECFC6CD37D}.Debug|x64.ActiveCfg = Debug|x64
+		{3C2CD33E-5300-46F0-9EDF-E4ECFC6CD37D}.Debug|x64.Build.0 = Debug|x64
+		{3C2CD33E-5300-46F0-9EDF-E4ECFC6CD37D}.Debug|x86.ActiveCfg = Debug|Win32
+		{3C2CD33E-5300-46F0-9EDF-E4ECFC6CD37D}.Debug|x86.Build.0 = Debug|Win32
+		{3C2CD33E-5300-46F0-9EDF-E4ECFC6CD37D}.Release|x64.ActiveCfg = Release|x64
+		{3C2CD33E-5300-46F0-9EDF-E4ECFC6CD37D}.Release|x64.Build.0 = Release|x64
+		{3C2CD33E-5300-46F0-9EDF-E4ECFC6CD37D}.Release|x86.ActiveCfg = Release|Win32
+		{3C2CD33E-5300-46F0-9EDF-E4ECFC6CD37D}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
