@@ -29,10 +29,10 @@
     <ClCompile Include="Meshe.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="WinMain.cpp">
+    <ClCompile Include="TempCam.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="TempCam.cpp">
+    <ClCompile Include="WinMain.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
   </ItemGroup>

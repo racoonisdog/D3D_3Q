@@ -2,20 +2,22 @@
 
 cbuffer ConstantBuffer : register(b0)
 {
-    matrix world; //   매트릭스는 float4x4로 대체 될 수 있습니다. 행이 없으면 매트릭스는 기본적으로 열 매트릭스로 기본값을 얻습니다.
-    matrix view;  //   행 매트릭스를 대표하기 전에 행을 추가 할 수 있습니다.
-    matrix projection;  //   이 튜토리얼은 향후 기본 열 마스터 매트릭스를 사용하지만 매트릭스는 C ++ 코드 측면에서 미리 변환해야합니다.
+	//CPU쪽에서 넘겨주는 변수 이름과 동일해야함
+    matrix world;
+    matrix view;
+    matrix projection;
 }
 
 
-struct VertexIn
+struct VShaderIn
 {
-    float3 posL : POSITION;
+	//(R, G, B, A)를 쓴다면 float4 , 텍스처 좌표(UV 좌표, U축, V축 정보)를 쓴다면 float2
+    float3 pos : POSITION;
     float4 color : COLOR;
 };
 
-struct VertexOut
+struct VShaderOut
 {
-    float4 posH : SV_POSITION;
+    float4 pos : SV_POSITION;
     float4 color : COLOR;
 };
