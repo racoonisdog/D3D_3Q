@@ -7,11 +7,11 @@
 #include <imgui_impl_dx11.h>
 
 
-struct Vertex
+struct VertexL
 {
 	Vector3 position;		// 정점 위치
-	Vector4 color;			// 정점 하나당 색깔
-	Vertex(Vector3 _position, Vector4 _color) : position(_position), color(_color) {};
+	Vector3 normalV;			// 정점 하나당 색깔
+	VertexL(Vector3 _position, Vector3 _normal) : position(_position), normalV(_normal) {};
 };
 
 struct Constant
@@ -19,13 +19,17 @@ struct Constant
 	XMFLOAT4X4 world;
 	XMFLOAT4X4 view;
 	XMFLOAT4X4 projection;
+
+	Vector4 vLightDir[2];
+	Vector4 vLightColor[2];
+	Vector4 vOutputColor;
 };
 
-class Meshe : public GameApp
+class Light : public GameApp
 {
 public:
-	Meshe(HINSTANCE hInstance);
-	~Meshe();
+	Light(HINSTANCE hInstance);
+	~Light();
 
 	// 렌더링 파이프라인을 구성하는 필수 객체의 인터페이스 (  뎊스 스텐실 뷰도 있지만 아직 사용하지 않는다.)
 	ID3D11Device* m_pDevice = nullptr;						// 디바이스	
@@ -38,6 +42,7 @@ public:
 	// 렌더링 파이프라인에 적용하는  객체와 정보
 	ID3D11VertexShader* m_pVertexShader = nullptr;	// 정점 셰이더.
 	ID3D11PixelShader* m_pPixelShader = nullptr;	// 픽셀 셰이더.	
+	ID3D11PixelShader* m_pPixelShaderSolid = nullptr; //단일 색상 픽셀 셰이더
 	ID3D11InputLayout* m_pInputLayout = nullptr;	// 입력 레이아웃.
 	ID3D11Buffer* m_pVertexBuffer = nullptr;		// 버텍스 버퍼.
 	ID3D11Buffer* m_pIndexBuffer = nullptr;			// 인덱스 버퍼.
@@ -50,24 +55,20 @@ public:
 
 	void SetMatrix();
 
+	//Update에서 갱신할 Matrix들
+	XMMATRIX m_Wolrd{};
+	XMMATRIX m_View{};
+	XMMATRIX m_Proj{};
 	
 	//world 관련 변수 //
 	XMFLOAT3 P_position{ 0.0f, 0.0f, 5.0f };
 	XMFLOAT3 P_rotation{ 0.0f, 0.0f, 0.0f };
 	XMFLOAT3 P_Scale{ 1.0f, 1.0f, 1.0f };
 
-	XMFLOAT3 Ch1_position{ 2.0f, 2.0f, 5.0f };
-	XMFLOAT3 Ch1_rotation{ 0.0f, 0.0f, 0.0f };
-	XMFLOAT3 Ch1_Scale{ 1.0f, 1.0f, 1.0f };
-
-	XMFLOAT3 Ch2_position{ 2.0f, 2.0f, 5.0f };
-	XMFLOAT3 Ch2_rotation{ 0.0f, 0.0f, 0.0f };
-	XMFLOAT3 Ch2_Scale{ 1.0f, 1.0f, 1.0f };
-
 
 	//카메라 변수
-	XMVECTOR eye = XMVectorSet(10.0f, 10.0f, 0.0f, 1.0f);
-	XMVECTOR target = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
+	XMVECTOR eye = XMVectorSet(00.0f, 0.0f, -10.0f, 1.0f);
+	XMVECTOR target = XMVectorSet(0.0f, 0.0f, 1.0f, 1.0f);
 	XMVECTOR up = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 
 	//카메라 보정함수
@@ -82,7 +83,6 @@ public:
 
 	//update를 위해 맴버변수로 둠
 	/*std::vector<Constant> ConstantList;*/
-	Constant constantList[3]{};
 	Constant constandices{};
 	
 
@@ -113,7 +113,7 @@ public:
 	void UninitImGUI();
 	void RenderGUI();
 	
-	float CamPosition[3] = { 10.0f , 10.0f, 0.0f };
+	float CamPosition[3] = { 0.0f , 0.0f, -10.0f };
 	const float eps = 0.01f;
 	float CamFovy = 45.0f;
 
@@ -121,4 +121,26 @@ public:
 	float Ch1speed = 4.0f;
 
 	virtual LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+
+	//빛 관련 변수들
+	
+	//라이트 색
+	XMFLOAT4 m_LightColors[2] =
+	{
+		XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f),
+		XMFLOAT4(0.0f, 1.0f, 0.0f, 0.0f)
+	};
+	//라이트 변수
+	XMFLOAT4 m_LightDirsEvaluated[2] =
+	{
+		XMFLOAT4(1.0f , 0.0f, 0.0f , 1.0f),
+		XMFLOAT4(0.0f, 1.0f, 0.0f, 1.0f)
+	};
+
+	float LightColor1[3] = { 1.0f, 1.0f, 1.0f };
+	float LightColor2[3] = { 0.0f, 1.0f, 0.0f };
+	
+	float LightDir1[3] = { 1.0f, 0.0f, 0.0f };
+	float LightDir2[3] = { 0.0f, 1.0f, 0.0f };
+	
 };

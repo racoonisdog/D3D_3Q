@@ -1,4 +1,4 @@
-﻿#include "Meshe.h"
+﻿#include "Light.h"
 #include "../Common/Helper.h"
 #include <directxtk/simplemath.h>
 #include <d3dcompiler.h>
@@ -19,61 +19,38 @@ using namespace DirectX::SimpleMath;
 */
 
 
-Meshe::Meshe(HINSTANCE hInstance) : GameApp(hInstance)
+Light::Light(HINSTANCE hInstance) : GameApp(hInstance)
 {
 
 }
 
 
-Meshe::~Meshe()
+Light::~Light()
 {
 	UninitScene();
 	UninitD3D();
 }
 
-void Meshe::SetMatrix()
+void Light::SetMatrix()
 {
 	//부모는 World matrix = local matrix 이므로 W_ 변수명
 	XMMATRIX S = XMMatrixScaling(P_Scale.x, P_Scale.y, P_Scale.z);
 	XMMATRIX R = XMMatrixRotationRollPitchYaw(P_rotation.x, P_rotation.y, P_rotation.z);
 	XMMATRIX T = XMMatrixTranslation(P_position.x, P_position.y, P_position.z);
-	XMMATRIX W_P = S * R * T;
+	m_Wolrd = S * R * T;
 
-	//자식은 부모의 matrix에 영향을 받으므로 L_ 변수명
-	S = XMMatrixScaling(Ch1_Scale.x, Ch1_Scale.y, Ch1_Scale.z);
-	R = XMMatrixRotationRollPitchYaw(Ch1_rotation.x, Ch1_rotation.y, Ch1_rotation.z);
-	T = XMMatrixTranslation(Ch1_position.x, Ch1_position.y, Ch1_position.z);
-	XMMATRIX L_Ch1 = S * R * T;
-
-	//자식은 부모의 matrix에 영향을 받으므로 L_ 변수명
-	S = XMMatrixScaling(Ch2_Scale.x, Ch2_Scale.y, Ch2_Scale.z);
-	R = XMMatrixRotationRollPitchYaw(Ch2_rotation.x, Ch2_rotation.y, Ch2_rotation.z);
-	T = XMMatrixTranslation(Ch2_position.x, Ch2_position.y, Ch2_position.z);
-	XMMATRIX L_Ch2 = S * R * T;
-
-
-	XMMATRIX W_Ch1 = L_Ch1 * W_P;
-	XMMATRIX W_Ch2 = L_Ch2 *W_Ch1;
-
-	//최종 matrix를 각 상수버퍼에 대입
-	XMStoreFloat4x4(&constantList[0].world, XMMatrixTranspose(W_P));
-	XMStoreFloat4x4(&constantList[1].world, XMMatrixTranspose(W_Ch1));
-	XMStoreFloat4x4(&constantList[2].world, XMMatrixTranspose(W_Ch2));
-
+	//view(카메라 수치)
+	//target = XMVector3TransformCoord(XMVectorZero(), m_Wolrd);
+	/*XMStoreFloat3(&P_position, target);*/
 	SanitizeCamera(eye, target, up);
-	for (int i = 0; i < 3; i++)
-	{
-		//projection 설정
-		XMMATRIX proj = XMMatrixPerspectiveFovLH(fovy, aspect, zNear, zFar);
-		XMStoreFloat4x4(&constantList[i].projection, XMMatrixTranspose(proj));
+	m_View = XMMatrixLookAtLH(eye, target, up);
 
-		//view(카메라 수치)
-		XMMATRIX view = XMMatrixLookAtLH(eye, target, up);
-		XMStoreFloat4x4(&constantList[i].view, XMMatrixTranspose(view));
-	}
+	//projection 설정
+	m_Proj = XMMatrixPerspectiveFovLH(fovy, aspect, zNear, zFar);
 }
 
-void Meshe::SanitizeCamera(XMVECTOR& eye, XMVECTOR& target, XMVECTOR& up)
+
+void Light::SanitizeCamera(XMVECTOR& eye, XMVECTOR& target, XMVECTOR& up)
 {
 	//최소거리 보장용 변수
 	const float kMinDist = 0.05f;
@@ -98,7 +75,7 @@ void Meshe::SanitizeCamera(XMVECTOR& eye, XMVECTOR& target, XMVECTOR& up)
 	if (cosPar > 0.999f) up = XMVectorSet(0, 1, 0, 0);
 }
 
-bool Meshe::Initialize(UINT Width, UINT Height)
+bool Light::Initialize(UINT Width, UINT Height)
 {
 	__super::Initialize(Width, Height);
 
@@ -114,23 +91,34 @@ bool Meshe::Initialize(UINT Width, UINT Height)
 	return true;
 }
 
-void Meshe::Update()
+void Light::Update()
 {
 	__super::Update();
 	float t = GameTimer::m_Instance->DeltaTime();
-	P_rotation.y += (t * Pspeed);
-	Ch1_rotation.y += (t * Ch1speed);
+
 	SetMatrix();
 }
 
-void Meshe::Render()
+void Light::Render()
 {
 	float color[4] = { 0.0f, 0.5f, 0.5f, 1.0f };
-	
+
+
+
 	// 컬러 버퍼(RTV) 초기화
 	m_pDeviceContext->ClearRenderTargetView(m_pRenderTargetView, color);
 	//깊이 버퍼초기화
 	m_pDeviceContext->ClearDepthStencilView(m_pDepthStencilView, D3D11_CLEAR_DEPTH, 1.0f, 0);
+
+	/*Constant cb1;*/
+	XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(m_Wolrd));
+	XMStoreFloat4x4(&constandices.view, XMMatrixTranspose(m_View));
+	XMStoreFloat4x4(&constandices.projection, XMMatrixTranspose(m_Proj));
+	constandices.vLightDir[0] = m_LightDirsEvaluated[0];
+	constandices.vLightDir[1] = m_LightDirsEvaluated[1];
+	constandices.vLightColor[0] = m_LightColors[0];
+	constandices.vLightColor[1] = m_LightColors[1];
+	constandices.vOutputColor = XMFLOAT4(0, 0, 0, 0);
 
 	// Draw계열 함수를 호출하기전에 렌더링 파이프라인에 필수 스테이지 설정을 해야한다.	
 	m_pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST); // 정점을 이어서 그릴 방식 설정.
@@ -143,36 +131,66 @@ void Meshe::Render()
 	// 인덱스 버퍼 바인딩
 	m_pDeviceContext->IASetIndexBuffer(m_pIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
 
+	
 	// 버텍스 셰이더 바인딩
 	m_pDeviceContext->VSSetShader(m_pVertexShader, nullptr, 0);
 	// 픽셀 셰이더 바인딩
 	m_pDeviceContext->PSSetShader(m_pPixelShader, nullptr, 0);
 
-	for (int i = 0; i < 3; i++)
-	{
-		//임시 컨테이너 생성, Map 결과를 담을 임시 구조체
-		D3D11_MAPPED_SUBRESOURCE mapped{};
-		//Map -> GPU의 이전 메모리 블록 주소는 버리고 새로 넘겨줄 데이터를 담을 메모리 블록 주소를 CPU에 넘겨줌 ( 이 주소를 mapped 에 담음)
-		//CPU 기준으로는 이전 메모리의 주소를 잃어버려 이전 값이 폐기, GPU기준으로는 이전 데이터를 내부적으로 보유하고 있어서 그리기 가능
-		//밑의 상수 버퍼에서 D3D11_USAGE_DYNAMIC 설정했다는 가정하에
-		m_pDeviceContext->Map(m_pConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-		memcpy(mapped.pData, &constantList[i], sizeof(constantList[i]));
-		//D3D11_MAP_WRITE_DISCARD는 내부적으로 버퍼 리네이밍(새 메모리 조각 교체)을 유도하기때문에 여기서만 사용
-		//-> 카피해준후 Unmap
-		m_pDeviceContext->Unmap(m_pConstantBuffer, 0);
-		//상수버퍼 바인딩
-		m_pDeviceContext->VSSetConstantBuffers(0, 1, &m_pConstantBuffer);
+	//임시 컨테이너 생성, Map 결과를 담을 임시 구조체
+	D3D11_MAPPED_SUBRESOURCE mapped{};
+	//Map -> GPU의 이전 메모리 블록 주소는 버리고 새로 넘겨줄 데이터를 담을 메모리 블록 주소를 CPU에 넘겨줌 ( 이 주소를 mapped 에 담음)
+	//CPU 기준으로는 이전 메모리의 주소를 잃어버려 이전 값이 폐기, GPU기준으로는 이전 데이터를 내부적으로 보유하고 있어서 그리기 가능
+	//밑의 상수 버퍼에서 D3D11_USAGE_DYNAMIC 설정했다는 가정하에
+	m_pDeviceContext->Map(m_pConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+	
+	memcpy(mapped.pData, &constandices, sizeof(constandices));
+	//D3D11_MAP_WRITE_DISCARD는 내부적으로 버퍼 리네이밍(새 메모리 조각 교체)을 유도하기때문에 여기서만 사용
+	//-> 카피해준후 Unmap
+	m_pDeviceContext->Unmap(m_pConstantBuffer, 0);
+	//상수버퍼 바인딩
 
-		//m_pDeviceContext->Draw(m_VertexCount, 0);				//인덱스 미사용시
-		m_pDeviceContext->DrawIndexed(m_IndexCount, 0, 0);		//인덱스 사용시
+	m_pDeviceContext->VSSetConstantBuffers(0, 1, &m_pConstantBuffer);
+	m_pDeviceContext->PSSetConstantBuffers(0, 1, &m_pConstantBuffer);
+	m_pDeviceContext->PSSetShader(m_pPixelShader, nullptr, 0);
+
+	//m_pDeviceContext->Draw(m_VertexCount, 0);				//인덱스 미사용시
+	m_pDeviceContext->DrawIndexed(m_IndexCount, 0, 0);		//인덱스 사용시
+	
+	//단색 박스 설정
+	for (int i = 0; i < 2; i++)
+	{
+		XMMATRIX mLight = XMMatrixTranslationFromVector(5.0f * XMLoadFloat4(&m_LightDirsEvaluated[i]));
+		XMMATRIX mLightScale = XMMatrixScaling(0.2f, 0.2f, 0.2f);
+		mLight = mLightScale * mLight;
+
+		Constant cb = {};
+		XMStoreFloat4x4(&cb.world, XMMatrixTranspose(mLight));
+		XMStoreFloat4x4(&cb.view, XMMatrixTranspose(m_View));
+		XMStoreFloat4x4(&cb.projection, XMMatrixTranspose(m_Proj));
+		cb.vLightDir[i] = m_LightDirsEvaluated[i];
+		cb.vLightColor[i] = m_LightColors[i];
+		cb.vOutputColor = m_LightColors[i];
+
+		D3D11_MAPPED_SUBRESOURCE mapped{};
+		m_pDeviceContext->Map(m_pConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+		memcpy(mapped.pData, &cb, sizeof(cb));
+		m_pDeviceContext->Unmap(m_pConstantBuffer, 0);
+
+		m_pDeviceContext->VSSetConstantBuffers(0, 1, &m_pConstantBuffer);
+		m_pDeviceContext->PSSetConstantBuffers(0, 1, &m_pConstantBuffer);
+
+		m_pDeviceContext->PSSetShader(m_pPixelShaderSolid, nullptr, 0);
+		m_pDeviceContext->DrawIndexed(m_IndexCount, 0, 0);
 	}
+
 
 	RenderGUI();
 	// Present the information rendered to the back buffer to the front buffer (the screen)
 	m_pSwapChain->Present(0, 0);
 }
 
-bool Meshe::InitD3D()
+bool Light::InitD3D()
 {
 	// 결과값.
 	HRESULT hr = 0;
@@ -222,7 +240,7 @@ bool Meshe::InitD3D()
 	return true;
 }
 
-void Meshe::UninitD3D()
+void Light::UninitD3D()
 {
 	SAFE_RELEASE(m_pRenderTargetView);
 	SAFE_RELEASE(m_pSwapChain);
@@ -231,26 +249,49 @@ void Meshe::UninitD3D()
 	UninitImGUI();
 }
 
-bool Meshe::InitScene()
+bool Light::InitScene()
 {
 	HRESULT hr = 0; // 결과값.
 	ID3D10Blob* errorMessage = nullptr;	 // 컴파일 에러 메시지가 저장될 버퍼.	
 
-	Vertex vertices[] =
+	//정점하나에 법선 3개를 담을 수 없기 때문에 중복된 정점 버퍼도 정의해줘야함
+	VertexL vertices[] =
 	{
-		Vertex(Vector3(-0.5f,  -0.5f, 0.5f), Vector4(1.0f, 0.0f, 0.0f, 1.0f)),
-		Vertex(Vector3(-0.5f, 0.5f, 0.5f), Vector4(0.0f, 1.0f, 0.0f, 1.0f)),
-		Vertex(Vector3(0.5f, -0.5f, 0.5f), Vector4(0.0f, 0.0f, 1.0f, 1.0f)),
-		Vertex(Vector3(0.5f, 0.5f, 0.5f), Vector4(0.0f, 0.0f, 1.0f, 1.0f)),
-		Vertex(Vector3(-0.5f,  -0.5f, -0.5f), Vector4(1.0f, 0.0f, 0.0f, 1.0f)),
-		Vertex(Vector3(0.5f, -0.5f, -0.5f), Vector4(0.0f, 0.0f, 1.0f, 1.0f)),
-		Vertex(Vector3(-0.5f, 0.5f, -0.5f), Vector4(0.0f, 1.0f, 0.0f, 1.0f)),
-		Vertex(Vector3(0.5f, 0.5f, -0.5f), Vector4(0.0f, 0.0f, 1.0f, 1.0f))
+		//Noarmal Y+
+		VertexL(Vector3(-1.0f, 1.0f, -1.0f), Vector3(0.0f, 1.0f, 0.0f)),
+		VertexL(Vector3(1.0f, 1.0f, -1.0f), Vector3(0.0f, 1.0f, 0.0f)),
+		VertexL(Vector3(1.0f, 1.0f, 1.0f), Vector3(0.0f, 1.0f, 0.0f)),
+		VertexL(Vector3(-1.0f, 1.0f, 1.0f), Vector3(0.0f, 1.0f, 0.0f)),
+		//Normal Y-
+		VertexL(Vector3(-1.0f, -1.0f, -1.0f), Vector3(0.0f, -1.0f, 0.0f)),
+		VertexL(Vector3(1.0f, -1.0f, -1.0f), Vector3(0.0f, -1.0f, 0.0f)),
+		VertexL(Vector3(1.0f, -1.0f, 1.0f), Vector3(0.0f, -1.0f, 0.0f)),
+		VertexL(Vector3(-1.0f, -1.0f, 1.0f), Vector3(0.0f, -1.0f, 0.0f)),
+		//Normal X-
+		VertexL(Vector3(-1.0f, -1.0f, 1.0f), Vector3(-1.0f, 0.0f, 0.0f)),
+		VertexL(Vector3(-1.0f, -1.0f, -1.0f), Vector3(-1.0f, 0.0f, 0.0f)),
+		VertexL(Vector3(-1.0f, 1.0f, -1.0f), Vector3(-1.0f, 0.0f, 0.0f)),
+		VertexL(Vector3(-1.0f, 1.0f, 1.0f), Vector3(-1.0f, 0.0f, 0.0f)),
+		//Normal X+
+		VertexL(Vector3(1.0f, -1.0f, 1.0f), Vector3(1.0f, 0.0f, 0.0f)),
+		VertexL(Vector3(1.0f, -1.0f, -1.0f), Vector3(1.0f, 0.0f, 0.0f)),
+		VertexL(Vector3(1.0f, 1.0f, -1.0f), Vector3(1.0f, 0.0f, 0.0f)),
+		VertexL(Vector3(1.0f, 1.0f, 1.0f), Vector3(1.0f, 0.0f, 0.0f)),
+		//Normal Z-
+		VertexL(Vector3(-1.0f, -1.0f, -1.0f), Vector3(0.0f, 0.0f, -1.0f)),
+		VertexL(Vector3(1.0f, -1.0f, -1.0f), Vector3(0.0f, 0.0f, -1.0f)),
+		VertexL(Vector3(1.0f, 1.0f, -1.0f), Vector3(0.0f, 0.0f, -1.0f)),
+		VertexL(Vector3(-1.0f, 1.0f, -1.0f), Vector3(0.0f, 0.0f, -1.0f)),
+		//Normal Z+
+		VertexL(Vector3(-1.0f, -1.0f, 1.0f), Vector3(0.0f, 0.0f, 1.0f)),
+		VertexL(Vector3(1.0f, -1.0f, 1.0f), Vector3(0.0f, 0.0f, 1.0f)),
+		VertexL(Vector3(1.0f, 1.0f, 1.0f), Vector3(0.0f, 0.0f, 1.0f)),
+		VertexL(Vector3(-1.0f, 1.0f, 1.0f), Vector3(0.0f, 0.0f, 1.0f)),
 	};
 
 	D3D11_BUFFER_DESC vbDesc = {};
 	m_VertexCount = ARRAYSIZE(vertices);	// 정점의 수
-	vbDesc.ByteWidth = sizeof(Vertex) * m_VertexCount; // 버텍스 버퍼의 크기(Byte).
+	vbDesc.ByteWidth = sizeof(VertexL) * m_VertexCount; // 버텍스 버퍼의 크기(Byte).
 	vbDesc.CPUAccessFlags = 0;
 	vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER; // 정점 버퍼로 사용.
 	vbDesc.MiscFlags = 0;
@@ -265,23 +306,18 @@ bool Meshe::InitScene()
 	// 인덱스 리스트
 	// index를 그릴때 순열이 중요함 ( 그리는 방향이 같아도 순열이 다르면 회전시 다른 방향이 될 수 있다 )
 	UINT indices[] = {
-		// +Z (앞) : 0,2,3,1  CCW
-			0, 2, 3,   0, 3, 1,
-
-			// -Z (뒤) : 4,6,7,5  CCW
-			4, 6, 7,   4, 7, 5,
-
-			// -X (왼) : 4,0,1,6  CCW
-			4, 0, 1,   4, 1, 6,
-
-			// +X (오) : 2,5,7,3  CCW
-			2, 5, 7,   2, 7, 3,
-
-			// +Y (위) : 1,3,7,6  CCW
-			1, 3, 7,   1, 7, 6,
-
-			// -Y (아래): 4,5,2,0 CCW
-			4, 5, 2,   4, 2, 0
+		//Y+
+		3,1,0, 2,1,3,
+		//Y-
+		6,4,5, 7,4,6,
+		//X-
+		11,9,8, 10,9,11,
+		//X+
+		14,12,13, 15,12,14,
+		//Z-
+		19,17,16, 18,17,19,
+		//Z+
+		22,20,21, 23,20,22
 	};
 
 	m_IndexCount = ARRAYSIZE(indices);	// 인덱스 수
@@ -300,7 +336,7 @@ bool Meshe::InitScene()
 
 
 	// 버텍스 버퍼 정보 
-	m_VertextBufferStride = sizeof(Vertex); // 버텍스 하나의 크기
+	m_VertextBufferStride = sizeof(VertexL); // 버텍스 하나의 크기
 	m_VertextBufferOffset = 0;	// 버텍스 시작 주소에서 더할 오프셋 주소
 
 	// 2. Render에서 파이프라인에 바인딩할  버텍스 셰이더 생성
@@ -313,7 +349,7 @@ bool Meshe::InitScene()
 	D3D11_INPUT_ELEMENT_DESC layout[] =  // 인풋 레이아웃은 버텍스 쉐이더가 입력받을 데이터의 형식을 지정한다.
 	{// SemanticName , SemanticIndex , Format , InputSlot , AlignedByteOffset , InputSlotClass , InstanceDataStepRate		
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		{ "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(Vertex, color), D3D11_INPUT_PER_VERTEX_DATA, 0}
+		{ "NORMAL",    0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0}
 	};
 	// 버텍스 셰이더의 Input에 지정된 내용과 같은지 검증하면서 InputLayout을 생성한다.
 	HR_T(hr = m_pDevice->CreateInputLayout(layout, ARRAYSIZE(layout),
@@ -328,7 +364,13 @@ bool Meshe::InitScene()
 	HR_T(m_pDevice->CreatePixelShader(	  // 필요한 데이터를 복사하며 객체 생성 
 		pixelShaderBuffer->GetBufferPointer(),
 		pixelShaderBuffer->GetBufferSize(), NULL, &m_pPixelShader));
-	SAFE_RELEASE(pixelShaderBuffer); // 복사했으니 버퍼는 해제 가능
+	//SAFE_RELEASE(pixelShaderBuffer); // 복사했으니 버퍼는 해제 가능
+
+	// 단일색상 픽셸 셰이더 생성
+	HR_T(CompileShaderFromFile(L"BasicPixelShader.hlsl", "PSSolid", "ps_4_0", &pixelShaderBuffer));
+	HR_T(m_pDevice->CreatePixelShader(pixelShaderBuffer->GetBufferPointer(),
+		pixelShaderBuffer->GetBufferSize(), NULL, &m_pPixelShaderSolid));
+	SAFE_RELEASE(pixelShaderBuffer);
 
 
 
@@ -381,7 +423,7 @@ bool Meshe::InitScene()
 	return true;
 }
 
-void Meshe::UninitScene()
+void Light::UninitScene()
 {
 	SAFE_RELEASE(m_pVertexBuffer);
 	SAFE_RELEASE(m_pInputLayout);
@@ -392,7 +434,7 @@ void Meshe::UninitScene()
 	SAFE_RELEASE(m_pDepthStencilView);
 }
 
-bool Meshe::InitImGUI()
+bool Light::InitImGUI()
 {
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -407,14 +449,14 @@ bool Meshe::InitImGUI()
 	return true;
 }
 
-void Meshe::UninitImGUI()
+void Light::UninitImGUI()
 {
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
 }
 
-void Meshe::RenderGUI()
+void Light::RenderGUI()
 {
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -432,7 +474,7 @@ void Meshe::RenderGUI()
 		ImGui::Text("Camera");
 		ImGui::DragFloat3("Position", CamPosition, 0.05f, -1000.0f, 1000.0f);
 
-		const float eps_local = 0.01f; // 안전 간격
+		const float eps_local = 0.001f; // 안전 간격
 		ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * 0.35f);
 		ImGui::DragFloat("zNear", &zNear, 0.1f, eps_local, zFar - eps_local);
 		ImGui::SameLine();
@@ -442,7 +484,7 @@ void Meshe::RenderGUI()
 		ImGui::DragFloat("Fov", &CamFovy, 0.05f, 10.0f, 170.0f);
 
 		if (ImGui::Button("Reset##Cam")) {
-			CamPosition[0] = 10.0f; CamPosition[1] = 10.0f; CamPosition[2] = 0.0f; // 헤더 기본값
+			CamPosition[0] = 0.0f; CamPosition[1] = 0.0f; CamPosition[2] = -10.0f; // 헤더 기본값
 			zNear = 0.1f; zFar = 1000.0f;
 			CamFovy = 45.0f;
 		}
@@ -458,44 +500,40 @@ void Meshe::RenderGUI()
 		ImGui::PushID(1);
 		ImGui::Text("Parent");
 		ImGui::DragFloat3("Position", &P_position.x, 0.05f, -1000.0f, 1000.0f);
+		ImGui::DragFloat3("Rotation", &P_rotation.x, 0.05f, -1000.0f, 1000.0f);
+		ImGui::DragFloat3("Scale", &P_Scale.x, 0.05f, -1000.0f, 1000.0f);
 		if (ImGui::Button("Reset##Parent")) {
 			P_position = XMFLOAT3(0.0f, 0.0f, 5.0f);
+			P_rotation = XMFLOAT3(0.0f, 0.0f, 0.0f);
+			P_Scale = XMFLOAT3(1.0f, 1.0f, 1.0f);
 		}
 		ImGui::PopID();
 		ImGui::NewLine();
-
-		// Child1
+		// 색깔
+		const float eps_color = 0.0001f; // 안전 간격
 		ImGui::PushID(2);
-		ImGui::Text("Child1");
-		ImGui::DragFloat3("Position", &Ch1_position.x, 0.05f, -1000.0f, 1000.0f);
-		if (ImGui::Button("Reset##Ch1")) {
-			Ch1_position = XMFLOAT3(2.0f, 2.0f, 5.0f);
+		ImGui::Text("Color");
+		ImGui::DragFloat3("Box1", LightColor1, 0.01f, 0.0f + eps_color, 1.0f - eps_color);
+		ImGui::DragFloat3("Box2", LightColor2, 0.01f, 0.0f + eps_color, 1.0f - eps_color);
+		if (ImGui::Button("Reset##Color")) {
+			LightColor1[0] = 1.0f; LightColor1[1] = 1.0f; LightColor1[2] = 1.0f;
+			LightColor2[0] = 0.0f; LightColor2[1] = 1.0f; LightColor2[2] = 0.0f;
 		}
+		m_LightColors[0].x = LightColor1[0]; m_LightColors[0].y = LightColor1[1]; m_LightColors[0].z = LightColor1[2];
+		m_LightColors[1].x = LightColor2[0]; m_LightColors[1].y = LightColor2[1]; m_LightColors[1].z = LightColor2[2];
 		ImGui::PopID();
 		ImGui::NewLine();
-
-		// Child2
+		//빛벡터
 		ImGui::PushID(3);
-		ImGui::Text("Child2");
-		ImGui::DragFloat3("Position", &Ch2_position.x, 0.05f, -1000.0f, 1000.0f);
-		if (ImGui::Button("Reset##Ch2")) {
-			Ch2_position = XMFLOAT3(2.0f, 2.0f, 5.0f);
+		ImGui::Text("Direction");
+		ImGui::DragFloat3("Box1", LightDir1, 0.01f, -1.0f + eps_local, 1.0f - eps_local);
+		ImGui::DragFloat3("Box2", LightDir2, 0.01f, -1.0f + eps_local, 1.0f - eps_local);
+		if (ImGui::Button("Reset##Direction")) {
+			LightDir1[0] = 1.0f; LightDir1[1] = 0.0f; LightDir1[2] = 0.0f;
+			LightDir2[0] = 0.0f; LightDir2[1] = 1.0f; LightDir2[2] = 0.0f;
 		}
-
-		ImGui::PopID();
-		ImGui::NewLine();
-
-		//Speed
-		ImGui::PushID(4);
-		ImGui::Text("Speed");
-		ImGui::DragFloat("ParentSpeed", &Pspeed, 0.1f, 1.0f, 30.0f);
-		ImGui::NewLine();
-		ImGui::DragFloat("Child1Speed", &Ch1speed, 0.1f, 1.0f, 30.0f);
-		if (ImGui::Button("Reset##Speed")) {
-			Pspeed = 2.0f;
-			Ch1speed = 4.0f;
-		}
-
+		m_LightDirsEvaluated[0].x = LightDir1[0]; m_LightDirsEvaluated[0].y = LightDir1[1]; m_LightDirsEvaluated[0].z = LightDir1[2];
+		m_LightDirsEvaluated[1].x = LightDir2[0]; m_LightDirsEvaluated[1].y = LightDir2[1]; m_LightDirsEvaluated[1].z = LightDir2[2];
 
 		ImGui::PopID();
 
@@ -508,7 +546,7 @@ void Meshe::RenderGUI()
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-LRESULT Meshe::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+LRESULT Light::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	if (ImGui_ImplWin32_WndProcHandler(hWnd, message, wParam, lParam))
 		return 1; // LRESULT 반환
