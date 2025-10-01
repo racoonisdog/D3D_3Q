@@ -118,6 +118,7 @@ public:
 	bool InitSkyBox();		// 스카이 박스 init용
 	void RenderSkyBox();	// 스카이 박스 render용
 	void UninitScene();
+	void UninitSkyBox();
 
 	//Vertex Buffer + Index Buffer 조합을 쓰기때문에 아래와 같이 따로 필요가 없음
 	//Vertex Buffer에는 중복없는 정점 데이터만 넣고 Index Buffer에는 이것들을 어떻게 이을건지에 대한 정보를 담음

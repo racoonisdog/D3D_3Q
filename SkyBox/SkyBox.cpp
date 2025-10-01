@@ -684,6 +684,23 @@ void SkyBox::UninitScene()
 	SAFE_RELEASE(m_pDepthStencilView);
 }
 
+void SkyBox::UninitSkyBox()
+{
+	S_VertexShader = nullptr;
+	S_PixelShader = nullptr;;
+	S_InputLayout = nullptr;
+
+	S_VertexBuffer = nullptr;
+	S_IndexBuffer = nullptr;
+	S_ConstantBuffer = nullptr;
+
+	S_CubeSRV = nullptr;
+	S_Sampler = nullptr;
+
+	S_DepthStencilState = nullptr;
+	S_RasterizerState = nullptr;
+}
+
 bool SkyBox::InitImGUI()
 {
 	IMGUI_CHECKVERSION();
