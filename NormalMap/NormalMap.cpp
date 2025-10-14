@@ -1,4 +1,4 @@
-﻿#include "BlinnPhong.h"
+﻿#include "NormalMap.h"
 #include "../Common/Helper.h"
 #include <directxtk/simplemath.h>
 #include <d3dcompiler.h>
@@ -20,19 +20,19 @@ using namespace DirectX::SimpleMath;
 */
 
 
-BlinnPhong::BlinnPhong(HINSTANCE hInstance) : GameApp(hInstance)
+NormalMap::NormalMap(HINSTANCE hInstance) : GameApp(hInstance)
 {
 
 }
 
 
-BlinnPhong::~BlinnPhong()
+NormalMap::~NormalMap()
 {
 	UninitScene();
 	UninitD3D();
 }
 
-void BlinnPhong::Reset()
+void NormalMap::Reset()
 {
 	m_World = Matrix::Identity;
 	m_CWorld = Matrix::Identity;
@@ -40,13 +40,11 @@ void BlinnPhong::Reset()
 	m_Position = Vector3(0.0f, 0.0f, -10.0f);
 }
 
-void BlinnPhong::SetMatrix()
+void NormalMap::SetMatrix()
 {
 	//부모는 World matrix = local matrix 이므로 W_ 변수명
 	XMMATRIX S = XMMatrixScaling(P_Scale.x, P_Scale.y, P_Scale.z);
-	//짐벌락 현상 대비 쿼터니언 사용
-	XMVECTOR Q = XMQuaternionRotationRollPitchYaw(P_rotation.x, P_rotation.y, P_rotation.z);
-	XMMATRIX R = XMMatrixRotationQuaternion(Q);
+	XMMATRIX R = XMMatrixRotationRollPitchYaw(P_rotation.x, P_rotation.y, P_rotation.z);
 	XMMATRIX T = XMMatrixTranslation(P_position.x, P_position.y, P_position.z);
 	m_World = S * R * T;
 
@@ -62,28 +60,28 @@ void BlinnPhong::SetMatrix()
 }
 
 
-void BlinnPhong::SanitizeCamera(Vector3& eye, Vector3& target, Vector3& up)
+void NormalMap::SanitizeCamera(Vector3& eye, Vector3& target, Vector3& up)
 {
-	 // eye == target 방지
-    if ((eye - target).LengthSquared() < 1e-12f) {
-        target = eye + Vector3(0,0,1); // +Z 기준
-    }
+	// eye == target 방지
+	if ((eye - target).LengthSquared() < 1e-12f) {
+		target = eye + Vector3(0, 0, 1); // +Z 기준
+	}
 
-    // up 정규화 및 forward와 평행 방지
-    Vector3 fwd = (target - eye); 
-    if (fwd.LengthSquared() < 1e-12f) fwd = Vector3(0,0,1);
-    fwd.Normalize();
+	// up 정규화 및 forward와 평행 방지
+	Vector3 fwd = (target - eye);
+	if (fwd.LengthSquared() < 1e-12f) fwd = Vector3(0, 0, 1);
+	fwd.Normalize();
 
-    if (up.LengthSquared() < 1e-12f) up = Vector3(0,1,0);
-    up.Normalize();
+	if (up.LengthSquared() < 1e-12f) up = Vector3(0, 1, 0);
+	up.Normalize();
 
-    // up이 forward와 너무 나란하면 살짝 비틀기
+	// up이 forward와 너무 나란하면 살짝 비틀기
 	if (fabsf(fwd.Dot(up)) > 0.999f) {
 		up = fabsf(fwd.y) < 0.9f ? Vector3(0, 1, 0) : Vector3(1, 0, 0);
 	}
 }
 
-bool BlinnPhong::Initialize(UINT Width, UINT Height)
+bool NormalMap::Initialize(UINT Width, UINT Height)
 {
 	__super::Initialize(Width, Height);
 
@@ -102,13 +100,13 @@ bool BlinnPhong::Initialize(UINT Width, UINT Height)
 	return true;
 }
 
-void BlinnPhong::Update()
+void NormalMap::Update()
 {
 	__super::Update();
 	SetMatrix();
 }
 
-void BlinnPhong::Render()
+void NormalMap::Render()
 {
 	float color[4] = { 0.0f, 0.5f, 0.5f, 1.0f };
 
@@ -122,12 +120,10 @@ void BlinnPhong::Render()
 	XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(m_World));
 	XMStoreFloat4x4(&constandices.view, XMMatrixTranspose(m_View));
 	XMStoreFloat4x4(&constandices.projection, XMMatrixTranspose(m_Proj));
-	//대칭변환행렬을 곱해줌, 좌표계 불일치를 보정하는 후처리
-	//XMMATRIX WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, m_World));
-	//XMMATRIX Flip = XMMatrixScaling(1.0f, -1.0f, -1.0f);
-	//WInvT = WInvT * Flip;
 	XMMATRIX WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, XMMatrixTranspose(m_World)));
-
+	//XMMATRIX WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, m_World));
+	/*XMMATRIX Flip = XMMatrixScaling(1.0f, -1.0f, -1.0f);
+	WInvT = WInvT * Flip;*/
 	XMStoreFloat4x4(&constandices.worldinverseT, WInvT);
 	constandices.vLightDir = m_LightDirsEvaluated;
 	constandices.vLightColor = m_LightColors;
@@ -150,7 +146,7 @@ void BlinnPhong::Render()
 	// 인덱스 버퍼 바인딩
 	m_pDeviceContext->IASetIndexBuffer(m_pIndexBuffer, DXGI_FORMAT_R32_UINT, 0);
 
-	
+
 	// 버텍스 셰이더 바인딩
 	m_pDeviceContext->VSSetShader(m_pVertexShader, nullptr, 0);
 	// 픽셀 셰이더 바인딩
@@ -162,27 +158,33 @@ void BlinnPhong::Render()
 	//CPU 기준으로는 이전 메모리의 주소를 잃어버려 이전 값이 폐기, GPU기준으로는 이전 데이터를 내부적으로 보유하고 있어서 그리기 가능
 	//밑의 상수 버퍼에서 D3D11_USAGE_DYNAMIC 설정했다는 가정하에
 	m_pDeviceContext->Map(m_pConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-	
+
 	memcpy(mapped.pData, &constandices, sizeof(constandices));
 	//D3D11_MAP_WRITE_DISCARD는 내부적으로 버퍼 리네이밍(새 메모리 조각 교체)을 유도하기때문에 여기서만 사용
 	//-> 카피해준후 Unmap
 	m_pDeviceContext->Unmap(m_pConstantBuffer, 0);
 	//상수버퍼 바인딩
 
-	m_pDeviceContext->Map(m_tConstantBuffer , 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+	m_pDeviceContext->Map(m_tConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
 	memcpy(mapped.pData, &materialconstand, sizeof(materialconstand));
 	m_pDeviceContext->Unmap(m_tConstantBuffer, 0);
 
+	//상수버퍼
 	m_pDeviceContext->VSSetConstantBuffers(0, 1, &m_pConstantBuffer);
 	m_pDeviceContext->PSSetConstantBuffers(0, 1, &m_pConstantBuffer);
 	m_pDeviceContext->PSSetConstantBuffers(1, 1, &m_tConstantBuffer);
-	m_pDeviceContext->PSSetShaderResources(0, 1, &m_pTextureRV);
+
+	//리소스
+	m_pDeviceContext->PSSetShaderResources(0, 1, M_ptexture.GetAddressOf());
+	m_pDeviceContext->PSSetShaderResources(1, 1, M_pnormal.GetAddressOf());
+	m_pDeviceContext->PSSetShaderResources(2, 1, M_pspecular.GetAddressOf());
+
 	m_pDeviceContext->PSSetSamplers(0, 1, &m_pSamplerLinear);
 
 
 	//m_pDeviceContext->Draw(m_VertexCount, 0);				//인덱스 미사용시
 	m_pDeviceContext->DrawIndexed(m_IndexCount, 0, 0);		//인덱스 사용시
-	
+
 
 
 	RenderSkyBox();
@@ -191,7 +193,7 @@ void BlinnPhong::Render()
 	m_pSwapChain->Present(0, 0);
 }
 
-bool BlinnPhong::InitD3D()
+bool NormalMap::InitD3D()
 {
 	// 초기화
 	Reset();
@@ -243,7 +245,7 @@ bool BlinnPhong::InitD3D()
 	return true;
 }
 
-void BlinnPhong::UninitD3D()
+void NormalMap::UninitD3D()
 {
 	SAFE_RELEASE(m_pRenderTargetView);
 	SAFE_RELEASE(m_pSwapChain);
@@ -252,7 +254,7 @@ void BlinnPhong::UninitD3D()
 	UninitImGUI();
 }
 
-void BlinnPhong::UninitSkyBox()
+void NormalMap::UninitSkyBox()
 {
 	S_VertexShader = nullptr;
 	S_PixelShader = nullptr;;
@@ -269,7 +271,7 @@ void BlinnPhong::UninitSkyBox()
 	S_RasterizerState = nullptr;
 }
 
-bool BlinnPhong::InitScene()
+bool NormalMap::InitScene()
 {
 	HRESULT hr = 0; // 결과값.
 	ID3D10Blob* errorMessage = nullptr;	 // 컴파일 에러 메시지가 저장될 버퍼.	
@@ -277,36 +279,41 @@ bool BlinnPhong::InitScene()
 	//정점하나에 법선 3개를 담을 수 없기 때문에 중복된 정점 버퍼도 정의해줘야함
 	VertexL vertices[] =
 	{
-		//Noarmal Y+
-		VertexL(Vector3(-1.0f, 1.0f, -1.0f), Vector3(0.0f, 1.0f, 0.0f), Vector2(1.0f, 0.0f)),
-		VertexL(Vector3(1.0f, 1.0f, -1.0f), Vector3(0.0f, 1.0f, 0.0f), Vector2(0.0f, 0.0f)),
-		VertexL(Vector3(1.0f, 1.0f, 1.0f), Vector3(0.0f, 1.0f, 0.0f), Vector2(0.0f, 1.0f)),
-		VertexL(Vector3(-1.0f, 1.0f, 1.0f), Vector3(0.0f, 1.0f, 0.0f), Vector2(1.0f, 1.0f)),
-		//Normal Y-
-		VertexL(Vector3(-1.0f, -1.0f, -1.0f), Vector3(0.0f, -1.0f, 0.0f), Vector2(0.0f, 0.0f)),
-		VertexL(Vector3(1.0f, -1.0f, -1.0f), Vector3(0.0f, -1.0f, 0.0f), Vector2(1.0f, 0.0f)),
-		VertexL(Vector3(1.0f, -1.0f, 1.0f), Vector3(0.0f, -1.0f, 0.0f), Vector2(1.0f, 1.0f)),
-		VertexL(Vector3(-1.0f, -1.0f, 1.0f), Vector3(0.0f, -1.0f, 0.0f), Vector2(0.0f, 1.0f)),
-		//Normal X-
-		VertexL(Vector3(-1.0f, -1.0f, 1.0f), Vector3(-1.0f, 0.0f, 0.0f), Vector2(0.0f, 1.0f)),
-		VertexL(Vector3(-1.0f, -1.0f, -1.0f), Vector3(-1.0f, 0.0f, 0.0f), Vector2(1.0f, 1.0f)),
-		VertexL(Vector3(-1.0f, 1.0f, -1.0f), Vector3(-1.0f, 0.0f, 0.0f), Vector2(1.0f, 0.0f)),
-		VertexL(Vector3(-1.0f, 1.0f, 1.0f), Vector3(-1.0f, 0.0f, 0.0f), Vector2(0.0f, 0.0f)),
-		//Normal X+
-		VertexL(Vector3(1.0f, -1.0f, 1.0f), Vector3(1.0f, 0.0f, 0.0f), Vector2(1.0f, 1.0f)),
-		VertexL(Vector3(1.0f, -1.0f, -1.0f), Vector3(1.0f, 0.0f, 0.0f), Vector2(0.0f, 1.0f)),
-		VertexL(Vector3(1.0f, 1.0f, -1.0f), Vector3(1.0f, 0.0f, 0.0f), Vector2(0.0f, 0.0f)),
-		VertexL(Vector3(1.0f, 1.0f, 1.0f), Vector3(1.0f, 0.0f, 0.0f), Vector2(1.0f, 0.0f)),
-		//Normal Z-
-		VertexL(Vector3(-1.0f, -1.0f, -1.0f), Vector3(0.0f, 0.0f, -1.0f), Vector2(0.0f, 1.0f)),
-		VertexL(Vector3(1.0f, -1.0f, -1.0f), Vector3(0.0f, 0.0f, -1.0f), Vector2(1.0f, 1.0f)),
-		VertexL(Vector3(1.0f, 1.0f, -1.0f), Vector3(0.0f, 0.0f, -1.0f), Vector2(1.0f, 0.0f)),
-		VertexL(Vector3(-1.0f, 1.0f, -1.0f), Vector3(0.0f, 0.0f, -1.0f), Vector2(0.0f, 0.0f)),
-		//Normal Z+
-		VertexL(Vector3(-1.0f, -1.0f, 1.0f), Vector3(0.0f, 0.0f, 1.0f), Vector2(1.0f, 1.0f)),
-		VertexL(Vector3(1.0f, -1.0f, 1.0f), Vector3(0.0f, 0.0f, 1.0f), Vector2(0.0f, 1.0f)),
-		VertexL(Vector3(1.0f, 1.0f, 1.0f), Vector3(0.0f, 0.0f, 1.0f), Vector2(0.0f, 0.0f)),
-		VertexL(Vector3(-1.0f, 1.0f, 1.0f), Vector3(0.0f, 0.0f, 1.0f), Vector2(1.0f, 0.0f)),
+		// Normal Y+
+		VertexL(Vector3(-1, 1, -1), Vector2(0, 0), Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, 1, 0)),
+		VertexL(Vector3(1, 1, -1), Vector2(1, 0), Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, 1, 0)),
+		VertexL(Vector3(1, 1,  1), Vector2(1, 1), Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, 1, 0)),
+		VertexL(Vector3(-1, 1,  1), Vector2(0, 1), Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, 1, 0)),
+		
+		// Normal Y-
+		VertexL(Vector3(-1, -1, -1), Vector2(0, 0), Vector3(1, 0, 0), Vector3(0, 0, -1), Vector3(0, -1, 0)),
+		VertexL(Vector3(1, -1, -1), Vector2(1, 0), Vector3(1, 0, 0), Vector3(0, 0, -1), Vector3(0, -1, 0)),
+		VertexL(Vector3(1, -1,  1), Vector2(1, 1), Vector3(1, 0, 0), Vector3(0, 0, -1), Vector3(0, -1, 0)),
+		VertexL(Vector3(-1, -1,  1), Vector2(0, 1), Vector3(1, 0, 0), Vector3(0, 0, -1), Vector3(0, -1, 0)),
+		
+		// Normal X-
+		VertexL(Vector3(-1, -1,  1), Vector2(0, 0), Vector3(0, 0, -1), Vector3(0, 1, 0), Vector3(-1, 0, 0)),
+		VertexL(Vector3(-1, -1, -1), Vector2(1, 0), Vector3(0, 0, -1), Vector3(0, 1, 0), Vector3(-1, 0, 0)),
+		VertexL(Vector3(-1,  1, -1), Vector2(1, 1), Vector3(0, 0, -1), Vector3(0, 1, 0), Vector3(-1, 0, 0)),
+		VertexL(Vector3(-1,  1,  1), Vector2(0, 1), Vector3(0, 0, -1), Vector3(0, 1, 0), Vector3(-1, 0, 0)),
+		
+		// Normal X+
+		VertexL(Vector3(1, -1, -1), Vector2(0, 0), Vector3(0, 0, 1), Vector3(0, 1, 0), Vector3(1, 0, 0)),
+		VertexL(Vector3(1, -1,  1), Vector2(1, 0), Vector3(0, 0, 1), Vector3(0, 1, 0), Vector3(1, 0, 0)),
+		VertexL(Vector3(1,  1,  1), Vector2(1, 1), Vector3(0, 0, 1), Vector3(0, 1, 0), Vector3(1, 0, 0)),
+		VertexL(Vector3(1,  1, -1), Vector2(0, 1), Vector3(0, 0, 1), Vector3(0, 1, 0), Vector3(1, 0, 0)),
+		
+		// Normal Z-
+		VertexL(Vector3(-1, -1, -1), Vector2(0, 0), Vector3(1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, -1)),
+		VertexL(Vector3(1, -1, -1), Vector2(1, 0), Vector3(1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, -1)),
+		VertexL(Vector3(1,  1, -1), Vector2(1, 1), Vector3(1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, -1)),
+		VertexL(Vector3(-1,  1, -1), Vector2(0, 1), Vector3(1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, -1)),
+		
+		// Normal Z+
+		VertexL(Vector3(-1, -1,  1), Vector2(0, 0), Vector3(-1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, 1)),
+		VertexL(Vector3(1, -1,  1), Vector2(1, 0), Vector3(-1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, 1)),
+		VertexL(Vector3(1,  1,  1), Vector2(1, 1), Vector3(-1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, 1)),
+		VertexL(Vector3(-1,  1,  1), Vector2(0, 1), Vector3(-1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, 1))
 	};
 
 	D3D11_BUFFER_DESC vbDesc = {};
@@ -331,9 +338,9 @@ bool BlinnPhong::InitScene()
 		//Y-
 		6,5,4, 7,6,4,
 		//X-
-		11,8,9, 10,11,9,
+		11,8,9, 9,10,11,
 		//X+
-		14,13,12, 15,14,12,
+		15,13,14, 15,12,13,
 		//Z-
 		19,16,17, 18,19,17,
 		//Z+
@@ -368,16 +375,20 @@ bool BlinnPhong::InitScene()
 	// 3. Render() 에서 파이프라인에 바인딩할 InputLayout 생성 	
 	D3D11_INPUT_ELEMENT_DESC layout[] =  // 인풋 레이아웃은 버텍스 쉐이더가 입력받을 데이터의 형식을 지정한다.
 	{// SemanticName , SemanticIndex , Format , InputSlot , AlignedByteOffset , InputSlotClass , InstanceDataStepRate		
-		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		{ "NORMAL",    0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
-		{ "TEXCOORD",    0, DXGI_FORMAT_R32G32_FLOAT, 0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0}
+		 { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },   // 0
+		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,    0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },   // 12
+		{ "TANGENT",  0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 20, D3D11_INPUT_PER_VERTEX_DATA, 0 },   // 20
+		{ "BINORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 32, D3D11_INPUT_PER_VERTEX_DATA, 0 },   // 32
+		{ "NORMAL",   0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 44, D3D11_INPUT_PER_VERTEX_DATA, 0 },   // 44
 	};
 	// 버텍스 셰이더의 Input에 지정된 내용과 같은지 검증하면서 InputLayout을 생성한다.
 	HR_T(hr = m_pDevice->CreateInputLayout(layout, ARRAYSIZE(layout),
 		vertexShaderBuffer->GetBufferPointer(), vertexShaderBuffer->GetBufferSize(), &m_pInputLayout));
 
-	SAFE_RELEASE(vertexShaderBuffer); // 복사했으니 버퍼는 해제 가능
-	HR_T(CreateDDSTextureFromFile(m_pDevice, L"../resource/single/test.dds", nullptr, &m_pTextureRV));
+	SAFE_RELEASE(vertexShaderBuffer);
+	HR_T(CreateTextureFromFile(m_pDevice, L"../resource/normap/Bricks059_1K-JPG_Color.jpg", M_ptexture.GetAddressOf()));
+	HR_T(CreateTextureFromFile(m_pDevice, L"../resource/normap/Bricks059_1K-JPG_NormalDX.jpg", M_pnormal.GetAddressOf()));
+	HR_T(CreateTextureFromFile(m_pDevice, L"../resource/normap/Bricks059_Specular.png", M_pspecular.GetAddressOf()));
 
 	//객체생성
 	D3D11_SAMPLER_DESC sampDesc = {};
@@ -419,7 +430,7 @@ bool BlinnPhong::InitScene()
 	constandices.lightspecular = { 1.00f, 1.00f, 1.00f, 1.0f }; // 정반사 색
 	materialconstand.matambient = { 1.0f, 1.0f, 1.0f, 1.0f };
 	materialconstand.matdiffuse = { 1.0f, 1.0f, 1.0f, 1.0f };
-	materialconstand.matspecular = { 0.04f, 0.04f, 0.04f, 1.0f }; // ks(비금속 기본치)
+	materialconstand.matspecular = { M_specular[0], M_specular[1], M_specular[2], 1.0f };
 	constandices.shininess = 2000.0f;
 
 	D3D11_BUFFER_DESC cbDesc{};
@@ -468,11 +479,11 @@ bool BlinnPhong::InitScene()
 	HR_T(m_pDevice->CreateDepthStencilView(textureDepthStencil, &descDSV, &m_pDepthStencilView));
 	m_pDeviceContext->OMSetRenderTargets(1, &m_pRenderTargetView, m_pDepthStencilView);
 	SAFE_RELEASE(textureDepthStencil);
-
+	
 	return true;
 }
 
-bool BlinnPhong::InitSkyBox()
+bool NormalMap::InitSkyBox()
 {
 	HRESULT hr = 0; // 결과값.
 	ID3D10Blob* errorMessage = nullptr;	 // 컴파일 에러 메시지가 저장될 버퍼.	
@@ -562,7 +573,7 @@ bool BlinnPhong::InitSkyBox()
 	S_VertexBufferStride = sizeof(VertexSky); // 버텍스 하나의 크기
 	S_VertexBufferOffset = 0;	// 버텍스 시작 주소에서 더할 오프셋 주소
 
-	
+
 	ComPtr<ID3DBlob> vertexShaderBuffer = nullptr;
 	HR_T(CompileShaderFromFile(L"SkyVertexShader.hlsl", "main", "vs_4_0", &vertexShaderBuffer));
 	HR_T(m_pDevice->CreateVertexShader(vertexShaderBuffer->GetBufferPointer(), // 필요한 데이터를 복사하며 객체 생성 
@@ -645,7 +656,7 @@ bool BlinnPhong::InitSkyBox()
 	return true;
 }
 
-void BlinnPhong::RenderSkyBox()
+void NormalMap::RenderSkyBox()
 {
 	// 상수버퍼 업데이트 (world/view/projection)
 	SkyConstant scb{};
@@ -686,7 +697,7 @@ void BlinnPhong::RenderSkyBox()
 	m_pDeviceContext->OMSetDepthStencilState(nullptr, 0);
 }
 
-void BlinnPhong::UninitScene()
+void NormalMap::UninitScene()
 {
 	SAFE_RELEASE(m_pVertexBuffer);
 	SAFE_RELEASE(m_pInputLayout);
@@ -697,7 +708,7 @@ void BlinnPhong::UninitScene()
 	SAFE_RELEASE(m_pDepthStencilView);
 }
 
-bool BlinnPhong::InitImGUI()
+bool NormalMap::InitImGUI()
 {
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -712,14 +723,14 @@ bool BlinnPhong::InitImGUI()
 	return true;
 }
 
-void BlinnPhong::UninitImGUI()
+void NormalMap::UninitImGUI()
 {
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
 }
 
-void BlinnPhong::RenderGUI()
+void NormalMap::RenderGUI()
 {
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -752,7 +763,7 @@ void BlinnPhong::RenderGUI()
 		ImGui::PopItemWidth();
 
 		ImGui::DragFloat("Fov", &CamFovy, 0.05f, 10.0f, 170.0f);
-		
+
 
 		float dt = GameTimer::m_Instance->DeltaTime();
 		//고정 수치가 아닌 카메라 월드행렬 기준 정면으로
@@ -890,7 +901,7 @@ void BlinnPhong::RenderGUI()
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-LRESULT BlinnPhong::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+LRESULT NormalMap::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	if (ImGui_ImplWin32_WndProcHandler(hWnd, message, wParam, lParam))
 		return 1; // LRESULT 반환
