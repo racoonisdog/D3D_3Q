@@ -9,25 +9,41 @@
 #include <vector>
 #include <stdexcept>
 #include <d3d11_1.h>
+#include <directxtk/SimpleMath.h> // directXmath 대신 사용
 #include <DirectXMath.h>
 
 using namespace DirectX;
+using namespace DirectX::SimpleMath;
 
-#include "SafeRelease.hpp"
+//윈도우 스마트 포인터용
+#include <wrl/client.h>
+using Microsoft::WRL::ComPtr;
+
 
 struct VERTEX {
-    FLOAT X, Y, Z;
-    XMFLOAT2 texcoord;
+    Vector3 position;
+    Vector2 tex;
+
+    Vector3 tangent;
+    Vector3 bitangent;
+    Vector3 normal;
 };
 
 struct Texture {
     std::string type;
     std::string path;
-    ID3D11ShaderResourceView* texture;
+    ComPtr<ID3D11ShaderResourceView> texture; // 데이터 없는듯?
 
     void Release() {
-        SafeRelease(texture);
+        texture = nullptr;
     }
+};
+
+struct Material
+{
+    Vector4 ambient;
+    Vector4 diffuse;
+    Vector4 specular;
 };
 
 class Mesh {
@@ -35,37 +51,53 @@ public:
     std::vector<VERTEX> vertices_;
     std::vector<UINT> indices_;
     std::vector<Texture> textures_;
-    ID3D11Device* dev_;
+    ComPtr<ID3D11Device> dev_;
 
-    Mesh(ID3D11Device* dev, const std::vector<VERTEX>& vertices, const std::vector<UINT>& indices, const std::vector<Texture>& textures) :
+    Mesh(ComPtr<ID3D11Device> dev, const std::vector<VERTEX>& vertices, const std::vector<UINT>& indices, const std::vector<Texture>& textures) :
         vertices_(vertices),
         indices_(indices),
         textures_(textures),
         dev_(dev),
-        VertexBuffer_(nullptr),
-        IndexBuffer_(nullptr) {
-        this->setupMesh(this->dev_);
+        VertexBuffer{},
+        IndexBuffer() {
+        this->setupMesh(this->dev_.Get());
     }
 
-    void Draw(ID3D11DeviceContext* devcon) {
+    void Draw(ComPtr<ID3D11DeviceContext>& devcon) {
         UINT stride = sizeof(VERTEX);
         UINT offset = 0;
 
-        devcon->IASetVertexBuffers(0, 1, &VertexBuffer_, &stride, &offset);
-        devcon->IASetIndexBuffer(IndexBuffer_, DXGI_FORMAT_R32_UINT, 0);
+        //DIFFUSE, EMISSIVE, NORMALS, SPECULAR 리소스 4개 사용을 위해 비워두는 작업
+        ID3D11ShaderResourceView* Ps_sr[4] = { nullptr };
+        devcon->PSSetShaderResources(0, 4, Ps_sr);
 
-        devcon->PSSetShaderResources(0, 1, &textures_[0].texture);
+        devcon->IASetVertexBuffers(0, 1, VertexBuffer.GetAddressOf(), &stride, &offset);
+        devcon->IASetIndexBuffer(IndexBuffer.Get(), DXGI_FORMAT_R32_UINT, 0);
+
+        int textureCount = textures_.size();
+        for (int i = 0; i < textureCount; ++i)
+        {
+            SetTextureType(devcon, i);
+        }
 
         devcon->DrawIndexed(static_cast<UINT>(indices_.size()), 0, 0);
     }
 
+    Material& GetMaterial()
+    {
+        return material;
+    }
+
     void Close() {
-        SafeRelease(VertexBuffer_);
-        SafeRelease(IndexBuffer_);
+
+        VertexBuffer = nullptr;
+        IndexBuffer = nullptr;
     }
 private:
     // Render data
-    ID3D11Buffer* VertexBuffer_, * IndexBuffer_;
+    ComPtr<ID3D11Buffer> VertexBuffer;
+    ComPtr<ID3D11Buffer> IndexBuffer;
+    Material material;
 
     // Functions
     // Initializes all the buffer objects/arrays
@@ -82,7 +114,7 @@ private:
         D3D11_SUBRESOURCE_DATA initData;
         initData.pSysMem = &vertices_[0];
 
-        hr = dev->CreateBuffer(&vbd, &initData, &VertexBuffer_);
+        hr = dev->CreateBuffer(&vbd, &initData, VertexBuffer.GetAddressOf());
         if (FAILED(hr)) {
             Close();
             throw std::runtime_error("Failed to create vertex buffer.");
@@ -97,10 +129,32 @@ private:
 
         initData.pSysMem = &indices_[0];
 
-        hr = dev->CreateBuffer(&ibd, &initData, &IndexBuffer_);
+        hr = dev->CreateBuffer(&ibd, &initData, IndexBuffer.GetAddressOf());
         if (FAILED(hr)) {
             Close();
             throw std::runtime_error("Failed to create index buffer.");
+        }
+    }
+
+    void SetTextureType(ComPtr<ID3D11DeviceContext>& dev, int _index)
+    {
+        std::string typeN = textures_[_index].type;
+
+        if (typeN == "DIFFUSE")
+        {
+            dev->PSSetShaderResources(0, 1, textures_[_index].texture.GetAddressOf());
+        }
+        else if (typeN == "EMISSIVE")
+        {
+            dev->PSSetShaderResources(1, 1, textures_[_index].texture.GetAddressOf());
+        }
+        else if (typeN == "NORMAL")
+        {
+            dev->PSSetShaderResources(2, 1, textures_[_index].texture.GetAddressOf());
+        }
+        else if (typeN == "SPECULAR")
+        {
+            dev->PSSetShaderResources(3, 1, textures_[_index].texture.GetAddressOf());
         }
     }
 };

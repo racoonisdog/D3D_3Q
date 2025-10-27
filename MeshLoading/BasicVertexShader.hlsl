@@ -8,9 +8,15 @@ VShaderOut main(VShaderIn vIn)
     VerTOut.pos = mul(float4(vIn.pos, 1.0f), world);		// 오브젝트 공간 -> 월드 공간으로 , 정점좌표를 Vector3으로 받기 때문에 동차좌표계로 변환(w는 1로)
     VerTOut.pos = mul(VerTOut.pos, view);                 // 월드 공간 -> 카메라 공간
     VerTOut.pos = mul(VerTOut.pos, projection);           // 카메라 공간 -> 클립 공간
-	
-	
-	
+    
+    //VerTOut.Norm = vIn.Norm;
+    //VerTOut.Tan = vIn.Tan;
+    //VerTOut.BiTan = vIn.BiTan;
+    //VerTOut.Tex = vIn.Tex;
+    //VerTOut.WorldPos = mul(float4(vIn.pos, 1), world).xyz;
+    
+    
+    
     float3x3 World3 = (float3x3) world;
     float3x3 Normal3 = (float3x3) worldinverseT;
 	
@@ -19,8 +25,8 @@ VShaderOut main(VShaderIn vIn)
     float3 Norworld = normalize(mul(vIn.Norm, Normal3));
 
     // 월드 탄젠트/비탄젠트
-    float3 Tanworld = normalize(mul(vIn.Tan, World3));
-    float3 Bitanworld = normalize(mul(vIn.BiTan, World3));
+    float3 Tanworld = normalize(mul(vIn.Tan, Normal3));
+    float3 Bitanworld = normalize(mul(vIn.BiTan, Normal3));
 
     // T를 N 평면에 정확히 올려놓기 위한 과정 (픽셀 보간/비균등 스케일로 틀어진 직교성 보정)
     Tanworld = normalize(Tanworld - Norworld * dot(Tanworld, Norworld));

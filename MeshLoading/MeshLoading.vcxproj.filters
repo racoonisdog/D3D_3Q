@@ -19,6 +19,7 @@
     <FxCompile Include="BasicVertexShader.hlsl" />
     <FxCompile Include="SkyPixelShader.hlsl" />
     <FxCompile Include="SkyVertexShader.hlsl" />
+    <FxCompile Include="BlinnPhong.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <None Include="imgui.ini" />
@@ -31,9 +32,24 @@
     <ClCompile Include="WinMain.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="ModelLoader.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="TextureLoader.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="MeshLoading.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="ModelLoader.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="TextureLoader.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Mesh.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
   </ItemGroup>

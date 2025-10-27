@@ -1,7 +1,9 @@
 // 정점 셰이더.
 Texture2D gTexture : register(t0);
-Texture2D gNormal : register(t1);
-Texture2D gSpecular : register(t2);
+Texture2D gEmission : register(t1);
+Texture2D gNormal : register(t2);
+Texture2D gSpecular : register(t3);
+
 SamplerState samLinear : register(s0);
 
 cbuffer ConstantBuffer : register(b0)
@@ -13,7 +15,6 @@ cbuffer ConstantBuffer : register(b0)
 	
     float4 LightDir;
     float4 LightColor;
-    float4 OutputColor;
 	
 	float4 lightambient;
 	float4 lightdiffuse;

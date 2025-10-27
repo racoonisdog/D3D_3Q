@@ -6,6 +6,8 @@
 #include <imgui_impl_win32.h>
 #include <imgui_impl_dx11.h>
 #include <directxtk/SimpleMath.h>
+#include <memory>
+#include "ModelLoader.h"
 
 
 using namespace DirectX::SimpleMath;
@@ -14,30 +16,11 @@ using namespace DirectX::SimpleMath;
 #include <wrl/client.h>
 using Microsoft::WRL::ComPtr;
 
-struct VertexL
-{
-	Vector3 position;		// 정점 위치
-	Vector2 tex;			// 텍스쳐 uv 좌표
-
-	Vector3 tangent;
-	Vector3 bitangent;
-	Vector3 normal;
-
-	VertexL(Vector3 _position, Vector2 _tex, Vector3 _tangent , Vector3 _bitangent, Vector3 _normal) :
-		position(_position), tex(_tex), tangent(_tangent), bitangent(_bitangent), normal(_normal) {};
-};
 
 struct VertexSky
 {
 	Vector3 position;		// 정점 위치
 	VertexSky(Vector3 _position) : position(_position){};
-};
-
-struct Material
-{
-	DirectX::XMFLOAT4 matambient;
-	DirectX::XMFLOAT4 matdiffuse;
-	DirectX::XMFLOAT4 matspecular; // SpecPower
 };
 
 struct Constant
@@ -49,7 +32,7 @@ struct Constant
 
 	Vector4 vLightDir;
 	Vector4 vLightColor;
-	Vector4 vOutputColor;
+	//Vector4 vOutputColor;
 
 	DirectX::XMFLOAT4 lightambient;			//환경광
 	DirectX::XMFLOAT4 lightdiffuse;			//난반사
@@ -72,9 +55,17 @@ public:
 	MeshLoading(HINSTANCE hInstance);
 	~MeshLoading();
 
+	// Model
+	std::unique_ptr<ModelLoader> m_pZelda = nullptr;
+	std::unique_ptr<ModelLoader> m_pCharacter = nullptr;
+	std::unique_ptr<ModelLoader> m_pTree = nullptr;
+	//std::unique_ptr<ModelLoader> m_pCube1 = nullptr;
+
+
+
 	// 렌더링 파이프라인을 구성하는 필수 객체의 인터페이스 (  뎊스 스텐실 뷰도 있지만 아직 사용하지 않는다.)
-	ID3D11Device* m_pDevice = nullptr;						// 디바이스	
-	ID3D11DeviceContext* m_pDeviceContext = nullptr;		// 즉시 디바이스 컨텍스트
+	ComPtr<ID3D11Device> m_pDevice = nullptr;						// 디바이스	
+	ComPtr<ID3D11DeviceContext> m_pDeviceContext = nullptr;		// 즉시 디바이스 컨텍스트
 	IDXGISwapChain* m_pSwapChain = nullptr;					// 스왑체인
 	ID3D11RenderTargetView* m_pRenderTargetView = nullptr;	// 렌더링 타겟뷰
 	ID3D11DepthStencilView* m_pDepthStencilView = nullptr;	// 깊이 타겟뷰
@@ -83,10 +74,11 @@ public:
 	// 렌더링 파이프라인에 적용하는  객체와 정보
 	ID3D11VertexShader* m_pVertexShader = nullptr;		// 정점 셰이더.
 	ID3D11PixelShader* m_pPixelShader = nullptr;		// 픽셀 셰이더.	
+	ComPtr<ID3D11PixelShader> m_pBlinnPhongShader = nullptr;		// 픽셀 셰이더.	
 	ID3D11PixelShader* m_pPixelShaderSolid = nullptr;	//단일 색상 픽셀 셰이더
 	ID3D11InputLayout* m_pInputLayout = nullptr;		// 입력 레이아웃.
-	ID3D11Buffer* m_pVertexBuffer = nullptr;			// 버텍스 버퍼.
-	ID3D11Buffer* m_pIndexBuffer = nullptr;				// 인덱스 버퍼.
+	//ID3D11Buffer* m_pVertexBuffer = nullptr;			// 버텍스 버퍼.
+	//ID3D11Buffer* m_pIndexBuffer = nullptr;			// 인덱스 버퍼.
 	ID3D11Buffer* m_pConstantBuffer = nullptr;			// 상수 버퍼.
 	ID3D11Buffer* m_tConstantBuffer = nullptr;			// 텍스쳐 상수 버퍼.
 	ID3D11ShaderResourceView* m_pTextureRV = nullptr;	// 텍스처 리소스 뷰.
@@ -101,14 +93,25 @@ public:
 	void SetMatrix();
 
 	//Update에서 갱신할 Matrix들
-	XMMATRIX m_World{};
 	XMMATRIX m_View{};
 	XMMATRIX m_Proj{};
 	
+	XMMATRIX m_ZeldaWorld{};
+	XMMATRIX m_CharWorld{};
+	XMMATRIX m_TreeWorld{};
+
 	//world 관련 변수 //
-	XMFLOAT3 P_position{ 0.0f, 0.0f, 5.0f };
-	XMFLOAT3 P_rotation{ 0.0f, 0.0f, 0.0f };
-	XMFLOAT3 P_Scale{ 1.0f, 1.0f, 1.0f };
+	XMFLOAT3 P_Zeldaposition{ 0.0f, 0.0f, 5.0f };
+	XMFLOAT3 P_Zeldarotation{ 0.0f, 0.0f, 0.0f };
+	XMFLOAT3 P_ZeldaScale{ 0.01f, 0.01f, 0.01f };
+
+	XMFLOAT3 P_Charposition{ 0.0f, 0.0f, 5.0f };
+	XMFLOAT3 P_Charrotation{ 0.0f, 0.0f, 0.0f };
+	XMFLOAT3 P_CharScale{ 0.01f, 0.01f, 0.01f };
+
+	XMFLOAT3 P_Treeposition{ 0.0f, 0.0f, 5.0f };
+	XMFLOAT3 P_Treerotation{ 0.0f, 0.0f, 0.0f };
+	XMFLOAT3 P_TreeScale{ 1.0f, 1.0f, 1.0f };
 
 
 	//카메라 변수
@@ -128,9 +131,7 @@ public:
 
 
 	//update를 위해 맴버변수로 둠
-	/*std::vector<Constant> ConstantList;*/
 	Constant constandices{};
-	Material materialconstand{};
 	
 
 	virtual bool Initialize(UINT Width, UINT Height);
@@ -145,6 +146,8 @@ public:
 	bool InitSkyBox();		// 스카이 박스 init용
 	void RenderSkyBox();	// 스카이 박스 render용
 	void UninitScene();
+
+	bool InitEffect();
 
 	//Vertex Buffer + Index Buffer 조합을 쓰기때문에 아래와 같이 따로 필요가 없음
 	//Vertex Buffer에는 중복없는 정점 데이터만 넣고 Index Buffer에는 이것들을 어떻게 이을건지에 대한 정보를 담음
@@ -179,16 +182,10 @@ public:
 	XMFLOAT4 m_LightColors = { XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f) };
 	XMFLOAT4 m_LightDirsEvaluated = { XMFLOAT4(1.0f , 0.0f, 0.0f , 1.0f) };
 
-	//material변수
-
-	//Light 변수
-
 
 	float LightColor1[3] = { 1.0f, 1.0f, 1.0f };
-	/*float LightColor2[3] = { 0.0f, 1.0f, 0.0f };*/
 	
 	float LightDir1[3] = { 1.0f, 0.0f, 0.0f };
-	/*float LightDir2[3] = { 0.0f, 1.0f, 0.0f };*/
 
 	ComPtr<ID3D11VertexShader> S_VertexShader;
 	ComPtr<ID3D11PixelShader> S_PixelShader;
@@ -198,16 +195,26 @@ public:
 	ComPtr<ID3D11Buffer> S_IndexBuffer;
 	ComPtr<ID3D11Buffer> S_ConstantBuffer;   // Constant buffer (view/proj 등, 16바이트 배수 정렬)
 
+	ComPtr<ID3D11Buffer> m_pMaterialBuffer{};					// 재질 버퍼
+
 	ComPtr<ID3D11ShaderResourceView> S_CubeSRV;   // TextureCube
 	ComPtr<ID3D11SamplerState> S_Sampler;   // 보통 공용 가능
 	
 	ComPtr<ID3D11DepthStencilState> S_DepthStencilState;
 	ComPtr<ID3D11RasterizerState>   S_RasterizerState;
 
+
+	
+	ComPtr<ID3D11DepthStencilState>	m_pDepthStateDefault;
+	ComPtr<ID3D11RasterizerState>  m_pRasterizerStateDefault;
 	// 노말맵 리소스
 	ComPtr<ID3D11ShaderResourceView> M_ptexture;
 	ComPtr<ID3D11ShaderResourceView> M_pnormal;
 	ComPtr<ID3D11ShaderResourceView> M_pspecular;
+
+	// 블랜더 변수
+	ComPtr<ID3D11BlendState> m_pBlendON;
+	ComPtr<ID3D11BlendState> m_pBlendOFF;
 
 	UINT S_VertexCount = 0;
 	UINT S_IndexCount = 0;
@@ -218,14 +225,12 @@ public:
 	float L_ambient[3] = { 0.04f, 0.04f, 0.04f };
 	float L_diffuse[3] = { 1.0f, 1.0f, 1.0f };
 	float L_specular[3] = { 1.0f, 1.0f, 1.0f };
-	float M_ambient[3] = { 1.0f, 1.0f, 1.0f };
-	float M_diffuse[3] = { 1.0f, 1.0f, 1.0f };
-	float M_specular[3] = { 1.0f, 1.0f, 1.0f };
 
 	//카메라 변수
 	Quaternion m_COri = Quaternion::Identity; // 카메라 방향
 	bool       m_RotateAboutLocal = true;
 	Vector3    m_UIRotPrev = { 0,0,0 };
 	
-	float speed = 4.0f;
+	float speed = 50.0f;
+	bool BlinPhongTrue = true;
 };
