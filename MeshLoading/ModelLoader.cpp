@@ -149,6 +149,7 @@ Mesh ModelLoader::processMesh(aiMesh* mesh, const aiScene* scene) {
 	if (mesh->mMaterialIndex >= 0) {
 		aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
 
+		//데이터를 읽어왔을때 존재하지 않을 경우 기본 옵션 사용할수 있도록
 		std::vector<Texture> diffuseMaps = this->loadMaterialTextures(material, aiTextureType_DIFFUSE, "DIFFUSE", scene);
 		if (!diffuseMaps.empty()) {
 			textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());

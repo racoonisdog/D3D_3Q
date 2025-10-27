@@ -75,6 +75,7 @@ public:
 	ID3D11VertexShader* m_pVertexShader = nullptr;		// 정점 셰이더.
 	ID3D11PixelShader* m_pPixelShader = nullptr;		// 픽셀 셰이더.	
 	ComPtr<ID3D11PixelShader> m_pBlinnPhongShader = nullptr;		// 픽셀 셰이더.	
+	ComPtr<ID3D11PixelShader> m_pBlendBlinnPhongShader = nullptr;		// 픽셀 셰이더.
 	ID3D11PixelShader* m_pPixelShaderSolid = nullptr;	//단일 색상 픽셀 셰이더
 	ID3D11InputLayout* m_pInputLayout = nullptr;		// 입력 레이아웃.
 	//ID3D11Buffer* m_pVertexBuffer = nullptr;			// 버텍스 버퍼.
@@ -233,4 +234,6 @@ public:
 	
 	float speed = 50.0f;
 	bool BlinPhongTrue = true;
+
+	bool alphaTrue = false;
 };

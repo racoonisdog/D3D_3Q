@@ -20,6 +20,7 @@
     <FxCompile Include="SkyPixelShader.hlsl" />
     <FxCompile Include="SkyVertexShader.hlsl" />
     <FxCompile Include="BlinnPhong.hlsl" />
+    <FxCompile Include="BlinnPhong_ablendon.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <None Include="imgui.ini" />

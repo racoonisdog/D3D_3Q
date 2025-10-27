@@ -150,7 +150,8 @@ void MeshLoading::Render()
 	float blendFactor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	UINT sampleMask = 0xffffffff;
 
-	m_pDeviceContext->OMSetBlendState(m_pBlendON.Get(), nullptr, sampleMask);
+	if(alphaTrue) {m_pDeviceContext->OMSetBlendState(m_pBlendON.Get(), nullptr, sampleMask);}
+	else { m_pDeviceContext->OMSetBlendState(m_pBlendOFF.Get(), nullptr, 0xFFFFFFFF); }
 
 
 	// Draw계열 함수를 호출하기전에 렌더링 파이프라인에 필수 스테이지 설정을 해야한다.	
@@ -163,8 +164,9 @@ void MeshLoading::Render()
 	// 버텍스 셰이더 바인딩
 	m_pDeviceContext->VSSetShader(m_pVertexShader, nullptr, 0);
 	// 픽셀 셰이더 바인딩
-	if(BlinPhongTrue) { m_pDeviceContext->PSSetShader(m_pBlinnPhongShader.Get(), nullptr, 0); }
-	else { m_pDeviceContext->PSSetShader(m_pPixelShader, nullptr, 0); }
+	if (!BlinPhongTrue && !alphaTrue) { m_pDeviceContext->PSSetShader(m_pPixelShader, nullptr, 0); }
+	else if (BlinPhongTrue) { m_pDeviceContext->PSSetShader(m_pBlinnPhongShader.Get(), nullptr, 0); }
+	else if (alphaTrue) { m_pDeviceContext->PSSetShader(m_pBlendBlinnPhongShader.Get(), nullptr, 0); }
 
 	////임시 컨테이너 생성, Map 결과를 담을 임시 구조체
 	//D3D11_MAPPED_SUBRESOURCE mapped{};
@@ -605,6 +607,7 @@ void MeshLoading::RenderSkyBox()
 	viewNoTrans.r[3] = XMVectorSet(0.0f, 0.0f, 0.0f, 1.0f);
 	XMStoreFloat4x4(&scb.view, XMMatrixTranspose(viewNoTrans));
 	XMStoreFloat4x4(&scb.projection, XMMatrixTranspose(m_Proj));
+
 	D3D11_MAPPED_SUBRESOURCE mapped{};
 	HR_T(m_pDeviceContext->Map(S_ConstantBuffer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
 	memcpy(mapped.pData, &scb, sizeof(scb));
@@ -629,6 +632,7 @@ void MeshLoading::RenderSkyBox()
 	
 	// 상태
 	m_pDeviceContext->OMSetDepthStencilState(S_DepthStencilState.Get(), 0);
+	// BlendOff
 	m_pDeviceContext->OMSetBlendState(m_pBlendOFF.Get(), nullptr, 0xFFFFFFFF);
 	m_pDeviceContext->RSSetState(S_RasterizerState.Get());
 
@@ -842,7 +846,21 @@ void MeshLoading::RenderGUI()
 		ImGui::PopID();
 		ImGui::NewLine();
 		ImGui::PushID(6);
-		ImGui::Checkbox("TrueBlinPhong", &BlinPhongTrue);
+		if (ImGui::Checkbox("BlinPhongBlenOff", &BlinPhongTrue))
+		{
+			if (BlinPhongTrue)
+			{
+				alphaTrue = false;
+			}
+		}
+
+		if (ImGui::Checkbox("BlinPhongBlenOn", &alphaTrue))
+		{
+			if (alphaTrue)
+			{
+				BlinPhongTrue = false;
+			}
+		}
 		ImGui::DragFloat("CamSpeed", &speed, 0.1f, eps_local, 1000.0f -eps_local);
 
 
@@ -888,6 +906,10 @@ bool MeshLoading::InitEffect()
 	pixelShaderBuffer.Reset();
 	HR_T(CompileShaderFromFile(L"BlinnPhong.hlsl", "main", "ps_4_0", pixelShaderBuffer.GetAddressOf()));
 	HR_T(m_pDevice->CreatePixelShader(pixelShaderBuffer->GetBufferPointer(), pixelShaderBuffer->GetBufferSize(), NULL, m_pBlinnPhongShader.GetAddressOf()));
+
+	pixelShaderBuffer.Reset();
+	HR_T(CompileShaderFromFile(L"BlinnPhong_ablendon.hlsl", "main", "ps_4_0", pixelShaderBuffer.GetAddressOf()));
+	HR_T(m_pDevice->CreatePixelShader(pixelShaderBuffer->GetBufferPointer(), pixelShaderBuffer->GetBufferSize(), NULL, m_pBlendBlinnPhongShader.GetAddressOf()));
 
 	return true;
 }
