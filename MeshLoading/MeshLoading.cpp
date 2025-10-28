@@ -138,6 +138,7 @@ void MeshLoading::Render()
 	//상수버퍼 재활용 부분
 	constandices.vLightDir = m_LightDirsEvaluated;
 	constandices.vLightColor = m_LightColors;
+	constandices.clipValue = clipValue;
 	XMStoreFloat4x4(&constandices.view, XMMatrixTranspose(m_View));
 	XMStoreFloat4x4(&constandices.projection, XMMatrixTranspose(m_Proj));
 	//constandices.vOutputColor = XMFLOAT4(0, 0, 0, 0);
@@ -873,6 +874,7 @@ void MeshLoading::RenderGUI()
 
 		ImGui::Checkbox("BlinPhongBlenOff", &BlinPhongTrue);
 		ImGui::DragFloat("CamSpeed", &speed, 0.1f, eps_local, 1000.0f -eps_local);
+		ImGui::DragFloat("ClipValue", &clipValue, 0.001f, eps_local, 0.5f - eps_local);
 
 
 		ImGui::PopID();

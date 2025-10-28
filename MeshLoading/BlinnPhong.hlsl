@@ -36,7 +36,7 @@ float4 main(VShaderOut input) : SV_TARGET
     float3 textureEmission = gEmission.Sample(samLinear, input.Tex).rgb;
     
     float alpha = albedo.a;
-    if (UseClip) clip(alpha - 0.4f);
+    if (UseClip) clip(alpha - clipValue);
     
     float3 color = ambient + diffuse + specular + textureEmission;
     return float4(color, albedo.a);

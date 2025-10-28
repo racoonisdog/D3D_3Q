@@ -21,6 +21,9 @@ cbuffer ConstantBuffer : register(b0)
 	float4 lightspecular;
 	float3 camPos;
 	float shininess;
+    
+    float clipValue;
+    float3 padding;
 }
 
 cbuffer MeshConstantBuffer : register(b1)
@@ -30,7 +33,7 @@ cbuffer MeshConstantBuffer : register(b1)
 	float4 matspecular;
     
     bool UseClip;
-    float3 padding;
+    float3 padding2;
 }
 
 

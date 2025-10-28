@@ -42,6 +42,9 @@ struct Constant
 
 	Vector3 camPos;						//카메라위치
 	float shininess;					//광택지수
+
+	float clipValue = 0.5;
+	Vector3 padding;
 };
 
 struct SkyConstant
@@ -240,4 +243,6 @@ public:
 	//랜더링 순서 계산 함수와 변수
 	void SetRenderSort();
 	vector< pair<float, shared_ptr<ModelLoader>>> renderlist{};
+
+	float clipValue = 0.5f;
 };
