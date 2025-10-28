@@ -9,8 +9,12 @@
 #include <assimp\scene.h>
 #include <assimp\postprocess.h>
 
+#include <assimp\material.h>
+#include <assimp\types.h>
+
 #include "Mesh.h"
 #include "TextureLoader.h"
+
 
 using namespace DirectX;
 
@@ -25,11 +29,13 @@ public:
 	Vector4 m_Specular{ 1.0f, 1.0f, 1.0f, 1.0f }; // 정반사 계수
 
 
-	bool Load(HWND hwnd, ID3D11Device* dev, ID3D11DeviceContext* devcon, std::string filename);
-	void Draw(ComPtr<ID3D11DeviceContext>& devcon, ComPtr<ID3D11Buffer>& materialB);
-
+	bool Load(HWND hwnd, ID3D11Device* dev, ID3D11DeviceContext* devcon, std::string filename , int _weight);
+	void Draw(ComPtr<ID3D11DeviceContext>& devcon, ComPtr<ID3D11Buffer>& materialB, ComPtr<ID3D11BlendState> &blendOn, ComPtr<ID3D11BlendState>& blendOff);
 
 	void Close();
+
+	int Getweight()const;
+
 private:
 	ComPtr<ID3D11Device> dev_{};
 	ComPtr<ID3D11DeviceContext> devcon_{};
@@ -37,6 +43,8 @@ private:
 	std::string directory_;
 	std::vector<Texture> textures_loaded_;
 	HWND hwnd_;
+	//가중치
+	int weight;
 
 
 

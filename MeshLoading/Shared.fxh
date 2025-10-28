@@ -28,6 +28,9 @@ cbuffer MeshConstantBuffer : register(b1)
 	float4 matambient;
 	float4 matdiffuse;
 	float4 matspecular;
+    
+    bool UseClip;
+    float3 padding;
 }
 
 

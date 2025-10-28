@@ -7,10 +7,12 @@
 #include <imgui_impl_dx11.h>
 #include <directxtk/SimpleMath.h>
 #include <memory>
+#include <utility>
 #include "ModelLoader.h"
 
 
 using namespace DirectX::SimpleMath;
+using namespace std;
 
 //윈도우 스마트 포인터용
 #include <wrl/client.h>
@@ -56,9 +58,9 @@ public:
 	~MeshLoading();
 
 	// Model
-	std::unique_ptr<ModelLoader> m_pZelda = nullptr;
-	std::unique_ptr<ModelLoader> m_pCharacter = nullptr;
-	std::unique_ptr<ModelLoader> m_pTree = nullptr;
+	std::shared_ptr<ModelLoader> m_pZelda = nullptr;
+	std::shared_ptr<ModelLoader> m_pCharacter = nullptr;
+	std::shared_ptr<ModelLoader> m_pTree = nullptr;
 	//std::unique_ptr<ModelLoader> m_pCube1 = nullptr;
 
 
@@ -75,7 +77,7 @@ public:
 	ID3D11VertexShader* m_pVertexShader = nullptr;		// 정점 셰이더.
 	ID3D11PixelShader* m_pPixelShader = nullptr;		// 픽셀 셰이더.	
 	ComPtr<ID3D11PixelShader> m_pBlinnPhongShader = nullptr;		// 픽셀 셰이더.	
-	ComPtr<ID3D11PixelShader> m_pBlendBlinnPhongShader = nullptr;		// 픽셀 셰이더.
+	//ComPtr<ID3D11PixelShader> m_pBlendBlinnPhongShader = nullptr;		// 픽셀 셰이더.
 	ID3D11PixelShader* m_pPixelShaderSolid = nullptr;	//단일 색상 픽셀 셰이더
 	ID3D11InputLayout* m_pInputLayout = nullptr;		// 입력 레이아웃.
 	//ID3D11Buffer* m_pVertexBuffer = nullptr;			// 버텍스 버퍼.
@@ -232,8 +234,10 @@ public:
 	bool       m_RotateAboutLocal = true;
 	Vector3    m_UIRotPrev = { 0,0,0 };
 	
-	float speed = 50.0f;
+	float speed = 20.0f;
 	bool BlinPhongTrue = true;
 
-	bool alphaTrue = false;
+	//랜더링 순서 계산 함수와 변수
+	void SetRenderSort();
+	vector< pair<float, shared_ptr<ModelLoader>>> renderlist{};
 };

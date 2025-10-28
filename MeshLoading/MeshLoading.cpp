@@ -133,7 +133,7 @@ void MeshLoading::Render()
 	//깊이 버퍼초기화
 	m_pDeviceContext->ClearDepthStencilView(m_pDepthStencilView, D3D11_CLEAR_DEPTH, 1.0f, 0);
 
-	RenderSkyBox();
+
 
 	//상수버퍼 재활용 부분
 	constandices.vLightDir = m_LightDirsEvaluated;
@@ -147,11 +147,10 @@ void MeshLoading::Render()
 
 	m_pDeviceContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constandices, 0, 0);
 
-	float blendFactor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-	UINT sampleMask = 0xffffffff;
+	/*UINT sampleMask = 0xffffffff;
 
 	if(alphaTrue) {m_pDeviceContext->OMSetBlendState(m_pBlendON.Get(), nullptr, sampleMask);}
-	else { m_pDeviceContext->OMSetBlendState(m_pBlendOFF.Get(), nullptr, 0xFFFFFFFF); }
+	else { m_pDeviceContext->OMSetBlendState(m_pBlendOFF.Get(), nullptr, 0xFFFFFFFF); }*/
 
 
 	// Draw계열 함수를 호출하기전에 렌더링 파이프라인에 필수 스테이지 설정을 해야한다.	
@@ -164,9 +163,9 @@ void MeshLoading::Render()
 	// 버텍스 셰이더 바인딩
 	m_pDeviceContext->VSSetShader(m_pVertexShader, nullptr, 0);
 	// 픽셀 셰이더 바인딩
-	if (!BlinPhongTrue && !alphaTrue) { m_pDeviceContext->PSSetShader(m_pPixelShader, nullptr, 0); }
+	if (!BlinPhongTrue/* && !alphaTrue*/) { m_pDeviceContext->PSSetShader(m_pPixelShader, nullptr, 0); }
 	else if (BlinPhongTrue) { m_pDeviceContext->PSSetShader(m_pBlinnPhongShader.Get(), nullptr, 0); }
-	else if (alphaTrue) { m_pDeviceContext->PSSetShader(m_pBlendBlinnPhongShader.Get(), nullptr, 0); }
+	//else if (alphaTrue) { m_pDeviceContext->PSSetShader(m_pBlendBlinnPhongShader.Get(), nullptr, 0); }
 
 	////임시 컨테이너 생성, Map 결과를 담을 임시 구조체
 	//D3D11_MAPPED_SUBRESOURCE mapped{};
@@ -195,29 +194,47 @@ void MeshLoading::Render()
 	m_pDeviceContext->RSSetState(m_pRasterizerStateDefault.Get());
 	m_pDeviceContext->OMSetDepthStencilState(m_pDepthStateDefault.Get(), 0);
 
+	SetRenderSort();
 
-	XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(m_ZeldaWorld));
+	for (auto& it : renderlist)
+	{
+		XMMATRIX temp{};
+		if (it.second.get() == m_pZelda.get()) { temp = m_ZeldaWorld; }
+		if (it.second.get() == m_pCharacter.get()) { temp = m_CharWorld; }
+		if (it.second.get() == m_pTree.get()) { temp = m_TreeWorld; }
+		XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(temp));
+		XMMATRIX WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, XMMatrixTranspose(temp)));
+
+
+		XMStoreFloat4x4(&constandices.worldinverseT, WInvT);
+		m_pDeviceContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constandices, 0, 0);
+		it.second->Draw(m_pDeviceContext, m_pMaterialBuffer, m_pBlendON, m_pBlendOFF);
+	}
+
+	/*XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(m_ZeldaWorld));
 	XMMATRIX WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, XMMatrixTranspose(m_ZeldaWorld)));
 	XMStoreFloat4x4(&constandices.worldinverseT, WInvT);
 	m_pDeviceContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constandices, 0, 0);
-	m_pZelda->Draw(m_pDeviceContext, m_pMaterialBuffer);
+	m_pZelda->Draw(m_pDeviceContext, m_pMaterialBuffer, m_pBlendON, m_pBlendOFF);
 	
 
 	XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(m_CharWorld));
 	WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, XMMatrixTranspose(m_CharWorld)));
 	XMStoreFloat4x4(&constandices.worldinverseT, WInvT);
 	m_pDeviceContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constandices, 0, 0);
-	m_pCharacter->Draw(m_pDeviceContext, m_pMaterialBuffer);
+	m_pCharacter->Draw(m_pDeviceContext, m_pMaterialBuffer, m_pBlendON, m_pBlendOFF);
 
 
 	XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(m_TreeWorld));
 	WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, XMMatrixTranspose(m_TreeWorld)));
 	XMStoreFloat4x4(&constandices.worldinverseT, WInvT);
 	m_pDeviceContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constandices, 0, 0);
-	m_pTree->Draw(m_pDeviceContext, m_pMaterialBuffer);
+	m_pTree->Draw(m_pDeviceContext, m_pMaterialBuffer, m_pBlendON, m_pBlendOFF);*/
 
 	
+	RenderSkyBox();
 	RenderGUI();
+
 	// Present the information rendered to the back buffer to the front buffer (the screen)
 	m_pSwapChain->Present(0, 0);
 }
@@ -379,22 +396,29 @@ bool MeshLoading::InitScene()
 
 	// 모델 생성
 	m_pZelda = std::make_unique<ModelLoader>();
-	if (!m_pZelda->Load(m_hWnd, m_pDevice.Get(), m_pDeviceContext.Get(), "resource\\zeldaPosed001.fbx"))
+	if (!m_pZelda->Load(m_hWnd, m_pDevice.Get(), m_pDeviceContext.Get(), "resource\\zeldaPosed001.fbx", 2))
 	{
 		MessageBox(m_hWnd, L"FBX couldn't be loaded ", NULL, MB_ICONERROR | MB_OK);
 	}
 
 	m_pCharacter = std::make_unique<ModelLoader>();
-	if (!m_pCharacter->Load(m_hWnd, m_pDevice.Get(), m_pDeviceContext.Get(), "resource\\Character.fbx"))
+	if (!m_pCharacter->Load(m_hWnd, m_pDevice.Get(), m_pDeviceContext.Get(), "resource\\Character.fbx", 3))
 	{
 		MessageBox(m_hWnd, L"FBX couldn't be loaded ", NULL, MB_ICONERROR | MB_OK);
 	}
 
 	m_pTree = std::make_unique<ModelLoader>();
-	if (!m_pTree->Load(m_hWnd, m_pDevice.Get(), m_pDeviceContext.Get(), "resource\\Tree.fbx"))
+	if (!m_pTree->Load(m_hWnd, m_pDevice.Get(), m_pDeviceContext.Get(), "resource\\Tree.fbx" ,1))
 	{
 		MessageBox(m_hWnd, L"FBX couldn't be loaded ", NULL, MB_ICONERROR | MB_OK);
 	}
+
+	pair<float, shared_ptr<ModelLoader>> temp{ 0.0f, m_pZelda };
+	renderlist.push_back(temp);
+	temp.first = 0.0f; temp.second = m_pCharacter;
+	renderlist.push_back(temp);
+	temp.first = 0.0f; temp.second = m_pTree;
+	renderlist.push_back(temp);
 
 
 	constandices.lightambient = { 0.04f, 0.04f, 0.04f, 1.0f }; // 환경광
@@ -846,21 +870,8 @@ void MeshLoading::RenderGUI()
 		ImGui::PopID();
 		ImGui::NewLine();
 		ImGui::PushID(6);
-		if (ImGui::Checkbox("BlinPhongBlenOff", &BlinPhongTrue))
-		{
-			if (BlinPhongTrue)
-			{
-				alphaTrue = false;
-			}
-		}
 
-		if (ImGui::Checkbox("BlinPhongBlenOn", &alphaTrue))
-		{
-			if (alphaTrue)
-			{
-				BlinPhongTrue = false;
-			}
-		}
+		ImGui::Checkbox("BlinPhongBlenOff", &BlinPhongTrue);
 		ImGui::DragFloat("CamSpeed", &speed, 0.1f, eps_local, 1000.0f -eps_local);
 
 
@@ -907,9 +918,9 @@ bool MeshLoading::InitEffect()
 	HR_T(CompileShaderFromFile(L"BlinnPhong.hlsl", "main", "ps_4_0", pixelShaderBuffer.GetAddressOf()));
 	HR_T(m_pDevice->CreatePixelShader(pixelShaderBuffer->GetBufferPointer(), pixelShaderBuffer->GetBufferSize(), NULL, m_pBlinnPhongShader.GetAddressOf()));
 
-	pixelShaderBuffer.Reset();
+	/*pixelShaderBuffer.Reset();
 	HR_T(CompileShaderFromFile(L"BlinnPhong_ablendon.hlsl", "main", "ps_4_0", pixelShaderBuffer.GetAddressOf()));
-	HR_T(m_pDevice->CreatePixelShader(pixelShaderBuffer->GetBufferPointer(), pixelShaderBuffer->GetBufferSize(), NULL, m_pBlendBlinnPhongShader.GetAddressOf()));
+	HR_T(m_pDevice->CreatePixelShader(pixelShaderBuffer->GetBufferPointer(), pixelShaderBuffer->GetBufferSize(), NULL, m_pBlendBlinnPhongShader.GetAddressOf()));*/
 
 	return true;
 }
@@ -922,5 +933,29 @@ LRESULT MeshLoading::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPar
 		return 1; // LRESULT 반환
 
 	return __super::WndProc(hWnd, message, wParam, lParam);
+}
+
+void MeshLoading::SetRenderSort()
+{
+	float zeldaDistance = P_Zeldaposition.z - m_Position.z;
+	float charDistance = P_Charposition.z - m_Position.z;
+	float treeDistance = P_Treeposition.z - m_Position.z;
+	
+	for (auto& it : renderlist)
+	{
+		if (it.second.get() == m_pZelda.get()) { it.first = zeldaDistance; }
+		else if (it.second.get() == m_pCharacter.get()) { it.first = charDistance; }
+		else if (it.second.get() == m_pTree.get()) { it.first = treeDistance; }
+
+	}
+	sort(renderlist.begin(), renderlist.end(), [](const pair<float, shared_ptr<ModelLoader>>& a, pair<float, shared_ptr<ModelLoader>>& b)
+		{
+			if (a.first != b.first)
+			{
+				return a.first > b.first;
+			}
+			
+			return a.second.get()->Getweight() < b.second.get()->Getweight();
+		});
 }
 

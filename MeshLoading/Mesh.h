@@ -12,6 +12,7 @@
 #include <directxtk/SimpleMath.h> // directXmath 대신 사용
 #include <DirectXMath.h>
 
+
 using namespace DirectX;
 using namespace DirectX::SimpleMath;
 
@@ -19,6 +20,14 @@ using namespace DirectX::SimpleMath;
 #include <wrl/client.h>
 using Microsoft::WRL::ComPtr;
 
+
+enum class Transparency {
+
+	Opaque,             //불투명
+	Cutout,             //투명   ( 나뭇잎 , 불꽃 등 -> clip())
+	AlphaBlend          //알파블랜딩 ( 유리 , 연기 등 ) 
+
+};
 
 struct VERTEX {
     Vector3 position;
@@ -44,6 +53,9 @@ struct Material
     Vector4 ambient;
     Vector4 diffuse;
     Vector4 specular;
+
+    int UseClip = false;
+    Vector3 padding;
 };
 
 class Mesh {
@@ -52,12 +64,14 @@ public:
     std::vector<UINT> indices_;
     std::vector<Texture> textures_;
     ComPtr<ID3D11Device> dev_;
+    Transparency TransMode = Transparency::Opaque;
 
-    Mesh(ComPtr<ID3D11Device> dev, const std::vector<VERTEX>& vertices, const std::vector<UINT>& indices, const std::vector<Texture>& textures) :
+    Mesh(ComPtr<ID3D11Device> dev, const std::vector<VERTEX>& vertices, const std::vector<UINT>& indices, const std::vector<Texture>& textures, Transparency tmod) :
         vertices_(vertices),
         indices_(indices),
         textures_(textures),
         dev_(dev),
+        TransMode(tmod),
         VertexBuffer{},
         IndexBuffer() {
         this->setupMesh(this->dev_.Get());

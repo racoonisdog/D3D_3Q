@@ -18,7 +18,7 @@ ModelLoader::~ModelLoader() {
 	devcon_ = nullptr;
 }
 
-bool ModelLoader::Load(HWND hwnd, ID3D11Device* dev, ID3D11DeviceContext* devcon, std::string filename) {
+bool ModelLoader::Load(HWND hwnd, ID3D11Device* dev, ID3D11DeviceContext* devcon, std::string filename, int _weight) {
 	Assimp::Importer importer;	// 기본 임포트 옵션
 
 	const aiScene* pScene = importer.ReadFile(filename,
@@ -36,14 +36,17 @@ bool ModelLoader::Load(HWND hwnd, ID3D11Device* dev, ID3D11DeviceContext* devcon
 	this->dev_ = dev;
 	this->devcon_ = devcon;
 	this->hwnd_ = hwnd;
+	this->weight = _weight;
 
 	processNode(pScene->mRootNode, pScene);
 
 	return true;
 }
 
-void ModelLoader::Draw(ComPtr<ID3D11DeviceContext>& devcon, ComPtr<ID3D11Buffer>& materialB) {
-	
+
+
+void ModelLoader::Draw(ComPtr<ID3D11DeviceContext>& devcon, ComPtr<ID3D11Buffer>& materialB, ComPtr<ID3D11BlendState>& blendOn, ComPtr<ID3D11BlendState>& blendOff)
+{	
 	int size = meshes_.size();
 	for (size_t i = 0; i < meshes_.size(); ++i) {
 		
@@ -52,12 +55,34 @@ void ModelLoader::Draw(ComPtr<ID3D11DeviceContext>& devcon, ComPtr<ID3D11Buffer>
 		meshMaterial.diffuse = m_Diffuse;
 		meshMaterial.specular = m_Specular;
 
+		UINT sampleMask = 0xffffffff;
+		//여기에 mesh의 enum클레스 확인후 넘겨줄값 설정 //알파블랜딩 사용여부 및 clip 사용유무까지
+		if (meshes_[i].TransMode == Transparency::Opaque)
+		{
+			devcon->OMSetBlendState(blendOff.Get(), nullptr, 0xFFFFFFFF);
+			meshMaterial.UseClip = false;
+		}
+		else if (meshes_[i].TransMode == Transparency::Cutout)
+		{
+			devcon->OMSetBlendState(blendOff.Get(), nullptr, 0xFFFFFFFF);
+			meshMaterial.UseClip = true;
+		}
+		else if (meshes_[i].TransMode == Transparency::AlphaBlend)
+		{
+			devcon->OMSetBlendState(blendOn.Get(), nullptr, sampleMask);
+			meshMaterial.UseClip = false;
+		}
+
+
 		devcon->UpdateSubresource(materialB.Get(), 0, nullptr, &meshMaterial, 0, 0);
 		devcon->PSSetConstantBuffers(1, 1, materialB.GetAddressOf());
+
+
 
 		meshes_[i].Draw(devcon);
 	}
 }
+
 
 Mesh ModelLoader::processMesh(aiMesh* mesh, const aiScene* scene) {
 	// Data to fill
@@ -182,7 +207,37 @@ Mesh ModelLoader::processMesh(aiMesh* mesh, const aiScene* scene) {
 		}
 	}
 
-	return Mesh(dev_, vertices, indices, textures);
+	//mesh가 알파블랜딩/ clip/ 둘다 안쓰는지 체크하기 위한 부분
+	aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];					//정보를 불러옴
+	//변수 2개
+	aiString opacityPath; Transparency T_Mod = Transparency::Opaque;
+	//불투명도 마스크 슬롯이 연결되었는지 확인하는 bool 변수
+	bool hasOpacityMap = (material->GetTexture(aiTextureType_OPACITY, 0, &opacityPath) == AI_SUCCESS);
+
+
+	//초기값을 1.0으로 주는 이유는 Get으로 opacity값을 가져왔을때 없다면 불투명 기본값인 1.0f을 사용하기 위함
+	float globalOpacity = 1.0f;
+	//material에서 투명도를 가져오는 식 (1.0 이면 완전 불투명 0.0~1.0 미만이면 투명도가 존재)
+	material->Get("$mat.opacity", // "$mat.opacity"
+		aiTextureType_NONE,           // 타입 (aiPTI_Float와 유사)
+		0,                            // 인덱스
+		globalOpacity);
+
+	if (hasOpacityMap)	//잘라낼 영역이 존재하기 때문에 clip함수 사용하도록
+	{
+		T_Mod = Transparency::Cutout;
+	}
+	else if (globalOpacity < 1.0f - 0.001f)	//1미만인 경우 완전 불투명이 아니기 때문에 알파블랜드 옵션사용
+	{
+		T_Mod = Transparency::AlphaBlend;
+	}
+	else
+	{
+		T_Mod = Transparency::Opaque;
+	}
+
+
+	return Mesh(dev_, vertices, indices, textures, T_Mod);
 }
 
 std::vector<Texture> ModelLoader::loadMaterialTextures(aiMaterial* mat, aiTextureType type, std::string typeName, const aiScene* scene) {
@@ -231,6 +286,11 @@ void ModelLoader::Close() {
 	for (size_t i = 0; i < meshes_.size(); i++) {
 		meshes_[i].Close();
 	}
+}
+
+int ModelLoader::Getweight() const
+{
+	return weight;
 }
 
 void ModelLoader::processNode(aiNode* node, const aiScene* scene) {
