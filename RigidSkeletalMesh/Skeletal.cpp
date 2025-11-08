@@ -1,4 +1,4 @@
-﻿#include "MeshLoading.h"
+﻿#include "Skeletal.h"
 #include "../Common/Helper.h"
 #include <directxtk/simplemath.h>
 #include <d3dcompiler.h>
@@ -21,19 +21,19 @@ using namespace DirectX::SimpleMath;
 */
 
 
-MeshLoading::MeshLoading(HINSTANCE hInstance) : GameApp(hInstance)
+Skeletal::Skeletal(HINSTANCE hInstance) : GameApp(hInstance)
 {
 
 }
 
 
-MeshLoading::~MeshLoading()
+Skeletal::~Skeletal()
 {
 	UninitScene();
 	UninitD3D();
 }
 
-void MeshLoading::Reset()
+void Skeletal::Reset()
 {
 	m_ZeldaWorld = Matrix::Identity;
 	m_CharWorld = Matrix::Identity;
@@ -43,25 +43,17 @@ void MeshLoading::Reset()
 	m_Position = Vector3(0.0f, 0.0f, -10.0f);
 }
 
-void MeshLoading::SetMatrix()
+void Skeletal::SetMatrix()
 {
-	//부모는 World matrix = local matrix 이므로 W_ 변수명
-	XMMATRIX S = XMMatrixScaling(P_ZeldaScale.x, P_ZeldaScale.y, P_ZeldaScale.z);
-	XMMATRIX R = XMMatrixRotationRollPitchYaw(P_Zeldarotation.x, P_Zeldarotation.y, P_Zeldarotation.z);
-	XMMATRIX T = XMMatrixTranslation(P_Zeldaposition.x, P_Zeldaposition.y, P_Zeldaposition.z);
-	m_ZeldaWorld = S * R * T;
+	XMMATRIX S = XMMatrixScaling(P_BoxManScale.x, P_BoxManScale.y, P_BoxManScale.z);
+	XMMATRIX R = XMMatrixRotationRollPitchYaw(P_BoxManrotation.x, P_BoxManrotation.y, P_BoxManrotation.z);
+	XMMATRIX T = XMMatrixTranslation(P_BoxManposition.x, P_BoxManposition.y, P_BoxManposition.z);
+	m_BoxManWorld = S * R * T;
 
-
-	S = XMMatrixScaling(P_CharScale.x, P_CharScale.y, P_CharScale.z);
-	R = XMMatrixRotationRollPitchYaw(P_Charrotation.x, P_Charrotation.y, P_Charrotation.z);
-	T = XMMatrixTranslation(P_Charposition.x, P_Charposition.y, P_Charposition.z);
-	m_CharWorld = S * R * T;
-
-
-	S = XMMatrixScaling(P_TreeScale.x, P_TreeScale.y, P_TreeScale.z);
-	R = XMMatrixRotationRollPitchYaw(P_Treerotation.x, P_Treerotation.y, P_Treerotation.z);
-	T = XMMatrixTranslation(P_Treeposition.x, P_Treeposition.y, P_Treeposition.z);
-	m_TreeWorld = S * R * T;
+	S = XMMatrixScaling(P_SkinningTestScale.x, P_SkinningTestScale.y, P_SkinningTestScale.z);
+	R = XMMatrixRotationRollPitchYaw(P_SkinningTestrotation.x, P_SkinningTestrotation.y, P_SkinningTestrotation.z);
+	T = XMMatrixTranslation(P_SkinningTestposition.x, P_SkinningTestposition.y, P_SkinningTestposition.z);
+	m_SkinningTestWorld = S * R * T;
 
 	//view(카메라 수치)
 	Vector3 eye = m_CWorld.Translation();
@@ -75,7 +67,7 @@ void MeshLoading::SetMatrix()
 }
 
 
-void MeshLoading::SanitizeCamera(Vector3& eye, Vector3& target, Vector3& up)
+void Skeletal::SanitizeCamera(Vector3& eye, Vector3& target, Vector3& up)
 {
 	// eye == target 방지
 	if ((eye - target).LengthSquared() < 1e-12f) {
@@ -96,7 +88,7 @@ void MeshLoading::SanitizeCamera(Vector3& eye, Vector3& target, Vector3& up)
 	}
 }
 
-bool MeshLoading::Initialize(UINT Width, UINT Height)
+bool Skeletal::Initialize(UINT Width, UINT Height)
 {
 	__super::Initialize(Width, Height);
 
@@ -118,13 +110,13 @@ bool MeshLoading::Initialize(UINT Width, UINT Height)
 	return true;
 }
 
-void MeshLoading::Update()
+void Skeletal::Update()
 {
 	__super::Update();
 	SetMatrix();
 }
 
-void MeshLoading::Render()
+void Skeletal::Render()
 {
 	float color[4] = { 0.0f, 0.5f, 0.5f, 1.0f };
 
@@ -132,8 +124,6 @@ void MeshLoading::Render()
 	m_pDeviceContext->ClearRenderTargetView(m_pRenderTargetView, color);
 	//깊이 버퍼초기화
 	m_pDeviceContext->ClearDepthStencilView(m_pDepthStencilView, D3D11_CLEAR_DEPTH, 1.0f, 0);
-
-
 
 	//상수버퍼 재활용 부분
 	constandices.vLightDir = m_LightDirsEvaluated;
@@ -147,38 +137,9 @@ void MeshLoading::Render()
 	constandices.camPos = { tempPos.x, tempPos.y, tempPos.z };
 
 	m_pDeviceContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constandices, 0, 0);
-
-	/*UINT sampleMask = 0xffffffff;
-
-	if(alphaTrue) {m_pDeviceContext->OMSetBlendState(m_pBlendON.Get(), nullptr, sampleMask);}
-	else { m_pDeviceContext->OMSetBlendState(m_pBlendOFF.Get(), nullptr, 0xFFFFFFFF); }*/
-
-
 	// Draw계열 함수를 호출하기전에 렌더링 파이프라인에 필수 스테이지 설정을 해야한다.	
 	m_pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST); // 정점을 이어서 그릴 방식 설정.
 
-
-	//입력 레이아웃 바인딩
-	m_pDeviceContext->IASetInputLayout(m_pInputLayout);
-
-	// 버텍스 셰이더 바인딩
-	m_pDeviceContext->VSSetShader(m_pVertexShader, nullptr, 0);
-	// 픽셀 셰이더 바인딩
-	if (!BlinPhongTrue/* && !alphaTrue*/) { m_pDeviceContext->PSSetShader(m_pPixelShader, nullptr, 0); }
-	else if (BlinPhongTrue) { m_pDeviceContext->PSSetShader(m_pBlinnPhongShader.Get(), nullptr, 0); }
-	//else if (alphaTrue) { m_pDeviceContext->PSSetShader(m_pBlendBlinnPhongShader.Get(), nullptr, 0); }
-
-	////임시 컨테이너 생성, Map 결과를 담을 임시 구조체
-	//D3D11_MAPPED_SUBRESOURCE mapped{};
-	////Map -> GPU의 이전 메모리 블록 주소는 버리고 새로 넘겨줄 데이터를 담을 메모리 블록 주소를 CPU에 넘겨줌 ( 이 주소를 mapped 에 담음)
-	////CPU 기준으로는 이전 메모리의 주소를 잃어버려 이전 값이 폐기, GPU기준으로는 이전 데이터를 내부적으로 보유하고 있어서 그리기 가능
-	////밑의 상수 버퍼에서 D3D11_USAGE_DYNAMIC 설정했다는 가정하에
-	//m_pDeviceContext->Map(m_pConstantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
-
-	//memcpy(mapped.pData, &constandices, sizeof(constandices));
-	////D3D11_MAP_WRITE_DISCARD는 내부적으로 버퍼 리네이밍(새 메모리 조각 교체)을 유도하기때문에 여기서만 사용
-	////-> 카피해준후 Unmap
-	//m_pDeviceContext->Unmap(m_pConstantBuffer, 0);
 
 
 	//상수버퍼
@@ -195,24 +156,88 @@ void MeshLoading::Render()
 	m_pDeviceContext->RSSetState(m_pRasterizerStateDefault.Get());
 	m_pDeviceContext->OMSetDepthStencilState(m_pDepthStateDefault.Get(), 0);
 
-	SetRenderSort();
 
-	for (auto& it : renderlist)
+
+	//float t = GameTimer::m_Instance->TotalTime();
+	float t = GameTimer::m_Instance->DeltaTime();
+
+	// 픽셀 셰이더 바인딩
+	if (!BlinPhongTrue/* && !alphaTrue*/) { m_pDeviceContext->PSSetShader(m_pPixelShader, nullptr, 0); }
+	else if (BlinPhongTrue) { m_pDeviceContext->PSSetShader(m_pBlinnPhongShader.Get(), nullptr, 0); }
+
+
+	// 버텍스 셰이더 바인딩
+	m_pDeviceContext->VSSetShader(m_pBoneVertexShader.Get(), nullptr, 0);
+	//입력 레이아웃 바인딩
+	m_pDeviceContext->IASetInputLayout(m_pBoneInputLayout.Get());
+
+
+	if (!stoptime)
 	{
-		XMMATRIX temp{};
-		if (it.second.get() == m_pZelda.get()) { temp = m_ZeldaWorld; }
-		if (it.second.get() == m_pCharacter.get()) { temp = m_CharWorld; }
-		if (it.second.get() == m_pTree.get()) { temp = m_TreeWorld; }
-		XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(temp));
-		XMMATRIX WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, XMMatrixTranspose(temp)));
-
-
-		XMStoreFloat4x4(&constandices.worldinverseT, WInvT);
-		m_pDeviceContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constandices, 0, 0);
-		it.second->Draw(m_pDeviceContext, m_pMaterialBuffer, m_pBlendON, m_pBlendOFF);
+		currentTime += (double)t;
 	}
 
+	PlaySkinningTest->Update(currentTime);
+	//PlayBoxHuman->Update(t, tempplayname1);
+
+	PlaySkinningTest->GetFinalMatrices(FinalBoneCS.gBoneMatrices);
+	//PlayBoxHuman->SetFinalMatrix(FinalBoneCS.gBoneMatrices);
+
+	m_pDeviceContext->UpdateSubresource(m_pBoneConstantBuffer.Get(), 0, nullptr, &FinalBoneCS, 0, 0);
+	m_pDeviceContext->VSSetConstantBuffers(2, 1, m_pBoneConstantBuffer.GetAddressOf());
+
+	//PlaySkinningTest->SetMatrix(OffsetBoneCS.OffsetMatrix, AnimeBoneCS.AnimateMatrix);
+
+	//상수버퍼
+	//m_pDeviceContext->UpdateSubresource(m_pOffsetBoneConstantBuffer.Get(), 0, nullptr, &FinalBoneCS, 0, 0);
+	//m_pDeviceContext->VSSetConstantBuffers(3, 1, m_pOffsetBoneConstantBuffer.GetAddressOf());
+
+	//m_pDeviceContext->UpdateSubresource(m_pAnimeBoneConstantBuffer.Get(), 0, nullptr, &FinalBoneCS, 0, 0);
+	//m_pDeviceContext->VSSetConstantBuffers(4, 1, m_pAnimeBoneConstantBuffer.GetAddressOf());
+
+
+	////skele
+	XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(m_SkinningTestWorld));
+	XMMATRIX WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, XMMatrixTranspose(m_SkinningTestWorld)));
+	XMStoreFloat4x4(&constandices.worldinverseT, WInvT);
+	m_pDeviceContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constandices, 0, 0);
+	////
+	SkinningTest.get()->DrawSkeletal(m_pDeviceContext, m_pMaterialBuffer, m_pBlendON, m_pBlendOFF);
+
+	//////
+	//XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(m_BoxManWorld));
+	//WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, XMMatrixTranspose(m_BoxManWorld)));
+	//XMStoreFloat4x4(&constandices.worldinverseT, WInvT);
+	//m_pDeviceContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constandices, 0, 0);
+	//////
+	//BoxMan.get()->DrawSkeletal(m_pDeviceContext, m_pMaterialBuffer, m_pBlendON, m_pBlendOFF);
+
+
+	ID3D11Buffer* nullBuffer[1] = { nullptr };
+	m_pDeviceContext->VSSetConstantBuffers(2, 1, nullBuffer); // VS 슬롯 2 해제
+
+	// 버텍스 셰이더 바인딩
+	m_pDeviceContext->VSSetShader(m_pVertexShader, nullptr, 0);
+	//입력 레이아웃 바인딩
+	m_pDeviceContext->IASetInputLayout(m_pInputLayout);
+
+
+	////static
+	XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(m_SkinningTestWorld));
+	WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, XMMatrixTranspose(m_SkinningTestWorld)));
+	XMStoreFloat4x4(&constandices.worldinverseT, WInvT);
+	m_pDeviceContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constandices, 0, 0);
+	////
+	SkinningTest.get()->DrawStatic(m_pDeviceContext, m_pMaterialBuffer, m_pBlendON, m_pBlendOFF);
+	////
+	//XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(m_BoxManWorld));
+	//WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, XMMatrixTranspose(m_BoxManWorld)));
+	//XMStoreFloat4x4(&constandices.worldinverseT, WInvT);
+	//m_pDeviceContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constandices, 0, 0);
+	//////
+	//BoxMan.get()->DrawStatic(m_pDeviceContext, m_pMaterialBuffer, m_pBlendON, m_pBlendOFF);
 	
+
 	RenderSkyBox();
 	RenderGUI();
 
@@ -220,7 +245,7 @@ void MeshLoading::Render()
 	m_pSwapChain->Present(0, 0);
 }
 
-bool MeshLoading::InitD3D()
+bool Skeletal::InitD3D()
 {
 	// 초기화
 	Reset();
@@ -313,25 +338,17 @@ bool MeshLoading::InitD3D()
 	m_pDeviceContext->OMSetRenderTargets(1, &m_pRenderTargetView, m_pDepthStencilView);
 	SAFE_RELEASE(textureDepthStencil);
 
-	// material buffer
-	D3D11_BUFFER_DESC mbd = {};
-	mbd.Usage = D3D11_USAGE_DEFAULT;
-	mbd.ByteWidth = sizeof(Material);
-	mbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-	mbd.CPUAccessFlags = 0;
-	HR_T(m_pDevice->CreateBuffer(&mbd, nullptr, m_pMaterialBuffer.GetAddressOf()));
-
 
 	//알파 블랜딩
 	D3D11_BLEND_DESC descBlend = {};
 	descBlend.RenderTarget[0].BlendEnable = true;						// blend 사용 여부
 
-	descBlend.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;		
+	descBlend.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
 	descBlend.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
-	descBlend.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;			
+	descBlend.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
 
 
-	descBlend.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;	
+	descBlend.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
 	descBlend.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
 	descBlend.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
 
@@ -342,17 +359,39 @@ bool MeshLoading::InitD3D()
 	descBlend.RenderTarget[0].BlendEnable = false;
 	m_pDevice->CreateBlendState(&descBlend, m_pBlendOFF.GetAddressOf());
 
+	//객체생성
+	D3D11_SAMPLER_DESC sampDesc = {};
+	//텍스처를 어떻게 보간해서 읽을지 지정 ( MIN: 멀리서볼때 , MAG: 가까이서 볼때, MIP: 밉맵 사이 전환할때 )
+	// 조합에 따라 다르게 씀
+	sampDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+	//텍스처 좌표가 0~1 범위를 벗어났을때 어떻게 처리할지 결정
+	//U, V, W 는 각각 텍스처의 3차원 축 ( 2D 텍스처라면 U/V만 사용)
+	//WRAP: 1.2->0.2로 바꿔서 텍스처를 타일처럼 반복,  CLAMP:1.2 ->1.0(가장자리 색 유지) , MIRROR:1.2->0.8(대칭 반복)
+	sampDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+	sampDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+	sampDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+	//샘플러가 비교모드로 동작할때 사용, 보통 섀도우 맵(그림자 계산용)에서 SampleCmp함수로 깊이 비교할때 사용, Never은 비교기능 사용 X -> 일반 텍스처 샘플링 용도로 사용
+	sampDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+	//샘플링할 수 있는 최소 LOD 지정, 0 -> 밉맵 레벨 0(가장 고해상도)부터 사용가능
+	sampDesc.MinLOD = 0;
+	// 샘플링 할 수 있는 최대 LOD 지정  Max-> 제한없음 (가장 낮은 해상도 밉맵까지 다 사용 가능)
+	sampDesc.MaxLOD = D3D11_FLOAT32_MAX;
+
+	HR_T(m_pDevice->CreateSamplerState(&sampDesc, &m_pSamplerLinear));
+
+
+
 	return true;
 }
 
-void MeshLoading::UninitD3D()
+void Skeletal::UninitD3D()
 {
 	SAFE_RELEASE(m_pRenderTargetView);
 	SAFE_RELEASE(m_pSwapChain);
 	UninitImGUI();
 }
 
-void MeshLoading::UninitSkyBox()
+void Skeletal::UninitSkyBox()
 {
 	S_VertexShader = nullptr;
 	S_PixelShader = nullptr;;
@@ -369,38 +408,48 @@ void MeshLoading::UninitSkyBox()
 	S_RasterizerState = nullptr;
 }
 
-bool MeshLoading::InitScene()
+bool Skeletal::InitScene()
 {
 	HRESULT hr = 0; // 결과값.
 	ID3D10Blob* errorMessage = nullptr;	 // 컴파일 에러 메시지가 저장될 버퍼.	
 
 
 	// 모델 생성
-	m_pZelda = std::make_unique<ModelLoader>();
-	if (!m_pZelda->Load(m_hWnd, m_pDevice.Get(), m_pDeviceContext.Get(), "resource\\zeldaPosed001.fbx", 2))
+
+	SkinningTest = std::make_shared<ModelLoader>();
+	if (!SkinningTest->Load(m_hWnd, m_pDevice.Get(), m_pDeviceContext.Get(), "resource\\SkinningTest.fbx", 0))
 	{
 		MessageBox(m_hWnd, L"FBX couldn't be loaded ", NULL, MB_ICONERROR | MB_OK);
 	}
+	//BoxMan = std::make_unique<ModelLoader>();
+	//if (!BoxMan->Load(m_hWnd, m_pDevice.Get(), m_pDeviceContext.Get(), "resource\\BoxHuman.fbx", 0))
+	//{
+	//	MessageBox(m_hWnd, L"FBX couldn't be loaded ", NULL, MB_ICONERROR | MB_OK);
+	//}
 
-	m_pCharacter = std::make_unique<ModelLoader>();
-	if (!m_pCharacter->Load(m_hWnd, m_pDevice.Get(), m_pDeviceContext.Get(), "resource\\Character.fbx", 3))
-	{
-		MessageBox(m_hWnd, L"FBX couldn't be loaded ", NULL, MB_ICONERROR | MB_OK);
-	}
+	//size_t BoxManSize = BoxMan.get()->GetAnimeName()->size();
+	size_t SkinningTestSize = SkinningTest.get()->GetAnimeName()->size();
 
-	m_pTree = std::make_unique<ModelLoader>();
-	if (!m_pTree->Load(m_hWnd, m_pDevice.Get(), m_pDeviceContext.Get(), "resource\\Tree.fbx" ,1))
-	{
-		MessageBox(m_hWnd, L"FBX couldn't be loaded ", NULL, MB_ICONERROR | MB_OK);
-	}
+	//animelist_BoxHuman.resize(BoxManSize);
+	animelist_SkinningTest.resize(SkinningTestSize);
 
-	pair<float, shared_ptr<ModelLoader>> temp{ 0.0f, m_pZelda };
-	renderlist.push_back(temp);
-	temp.first = 0.0f; temp.second = m_pCharacter;
-	renderlist.push_back(temp);
-	temp.first = 0.0f; temp.second = m_pTree;
-	renderlist.push_back(temp);
+	//copy(BoxMan.get()->GetAnimeName()->begin(), BoxMan.get()->GetAnimeName()->end(), animelist_BoxHuman.begin());
+	copy(SkinningTest.get()->GetAnimeName()->begin(), SkinningTest.get()->GetAnimeName()->end(), animelist_SkinningTest.begin());
+	
+	//PlayBoxHuman = new AnimationController();
+	PlaySkinningTest = new AnimationController();
 
+	//PlayBoxHuman->Initialize(&BoxMan->Getanimelist(), BoxMan.get()->GetSkeletonInfo());
+	PlaySkinningTest->Initialize(SkinningTest.get()->GetSkeletonInfo());
+	PlaySkinningTest->SetClipTable(&SkinningTest->Getanimelist());
+	
+
+	//tempplayname1 = animelist_BoxHuman[0];
+	tempplayname2 = animelist_SkinningTest[0];
+	PlaySkinningTest->SetClipByName(tempplayname2);
+
+	DurationAnime = SkinningTest.get()->GetAnimation(tempplayname2)->GetDurationTicks();
+	TicksPerSecond = SkinningTest.get()->GetAnimation(tempplayname2)->GetTicksPerSecond();
 
 	constandices.lightambient = { 0.04f, 0.04f, 0.04f, 1.0f }; // 환경광
 	constandices.lightdiffuse = { 1.00f, 1.00f, 1.00f, 1.0f }; // 난반사 색
@@ -426,10 +475,25 @@ bool MeshLoading::InitScene()
 	cbDesc.StructureByteStride = 0;
 	HR_T(hr = m_pDevice->CreateBuffer(&cbDesc, nullptr, &m_pConstantBuffer));
 
+	// material buffer
+	cbDesc.ByteWidth = (sizeof(Material) + 15) & ~15;;
+	HR_T(m_pDevice->CreateBuffer(&cbDesc, nullptr, m_pMaterialBuffer.GetAddressOf()));
+
+
+	//본 상수버퍼 설정
+	cbDesc.ByteWidth = (sizeof(FinalBoneMatrix) + 15) & ~15;;
+	HR_T(hr = m_pDevice->CreateBuffer(&cbDesc, nullptr, m_pBoneConstantBuffer.GetAddressOf()));
+
+	/*cbDesc.ByteWidth = (sizeof(OffsetBoneMatrix) + 15) & ~15;;
+	HR_T(hr = m_pDevice->CreateBuffer(&cbDesc, nullptr, m_pOffsetBoneConstantBuffer.GetAddressOf()));
+
+	cbDesc.ByteWidth = (sizeof(AnimateBoneMatrix) + 15) & ~15;;
+	HR_T(hr = m_pDevice->CreateBuffer(&cbDesc, nullptr, m_pAnimeBoneConstantBuffer.GetAddressOf()));*/
+
 	return true;
 }
 
-bool MeshLoading::InitSkyBox()
+bool Skeletal::InitSkyBox()
 {
 	HRESULT hr = 0; // 결과값.
 	ID3D10Blob* errorMessage = nullptr;	 // 컴파일 에러 메시지가 저장될 버퍼.	
@@ -603,7 +667,7 @@ bool MeshLoading::InitSkyBox()
 	return true;
 }
 
-void MeshLoading::RenderSkyBox()
+void Skeletal::RenderSkyBox()
 {
 	// 상수버퍼 업데이트 (world/view/projection)
 	SkyConstant scb{};
@@ -634,7 +698,7 @@ void MeshLoading::RenderSkyBox()
 	m_pDeviceContext->PSSetShaderResources(0, 1, S_CubeSRV.GetAddressOf());
 	m_pDeviceContext->PSSetSamplers(0, 1, S_Sampler.GetAddressOf());
 
-	
+
 	// 상태
 	m_pDeviceContext->OMSetDepthStencilState(S_DepthStencilState.Get(), 0);
 	// BlendOff
@@ -649,7 +713,7 @@ void MeshLoading::RenderSkyBox()
 	//m_pDeviceContext->OMSetDepthStencilState(nullptr, 0);
 }
 
-void MeshLoading::UninitScene()
+void Skeletal::UninitScene()
 {
 	SAFE_RELEASE(m_pInputLayout);
 	SAFE_RELEASE(m_pVertexShader);
@@ -658,7 +722,7 @@ void MeshLoading::UninitScene()
 	SAFE_RELEASE(m_pDepthStencilView);
 }
 
-bool MeshLoading::InitImGUI()
+bool Skeletal::InitImGUI()
 {
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -673,14 +737,14 @@ bool MeshLoading::InitImGUI()
 	return true;
 }
 
-void MeshLoading::UninitImGUI()
+void Skeletal::UninitImGUI()
 {
 	ImGui_ImplDX11_Shutdown();
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
 }
 
-void MeshLoading::RenderGUI()
+void Skeletal::RenderGUI()
 {
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -780,51 +844,10 @@ void MeshLoading::RenderGUI()
 		ImGui::PopID();
 		ImGui::NewLine();
 
-		// Zelda
-		ImGui::PushID(1);
-		ImGui::Text("Zelda");
-		ImGui::DragFloat3("Position", &P_Zeldaposition.x, 0.05f, -1000.0f, 1000.0f);
-		ImGui::DragFloat3("Rotation", &P_Zeldarotation.x, 0.05f, -1000.0f, 1000.0f);
-		ImGui::DragFloat3("Scale", &P_ZeldaScale.x, 0.001f, -1000.0f, 1000.0f);
-		if (ImGui::Button("Reset##Zelda")) {
-			P_Zeldaposition = XMFLOAT3(0.0f, 0.0f, 5.0f);
-			P_Zeldarotation = XMFLOAT3(0.0f, 0.0f, 0.0f);
-			P_ZeldaScale = XMFLOAT3(0.01f, 0.01f, 0.01f);
-		}
-		ImGui::PopID();
-		ImGui::NewLine();
-
-		// Character
-		ImGui::PushID(2);
-		ImGui::Text("Character");
-		ImGui::DragFloat3("Position", &P_Charposition.x, 0.05f, -1000.0f, 1000.0f);
-		ImGui::DragFloat3("Rotation", &P_Charrotation.x, 0.05f, -1000.0f, 1000.0f);
-		ImGui::DragFloat3("Scale", &P_CharScale.x, 0.001f, -1000.0f, 1000.0f);
-		if (ImGui::Button("Reset##Character")) {
-			P_Charposition = XMFLOAT3(0.0f, 0.0f, 5.0f);
-			P_Charrotation = XMFLOAT3(0.0f, 0.0f, 0.0f);
-			P_CharScale = XMFLOAT3(0.01f, 0.01f, 0.01f);
-		}
-		ImGui::PopID();
-		ImGui::NewLine();
-
-		// Tree
-		ImGui::PushID(3);
-		ImGui::Text("Tree");
-		ImGui::DragFloat3("Position", &P_Treeposition.x, 0.05f, -1000.0f, 1000.0f);
-		ImGui::DragFloat3("Rotation", &P_Treerotation.x, 0.05f, -1000.0f, 1000.0f);
-		ImGui::DragFloat3("Scale", &P_TreeScale.x, 0.001f, -1000.0f, 1000.0f);
-		if (ImGui::Button("Reset##Tree")) {
-			P_Treeposition = XMFLOAT3(0.0f, 0.0f, 5.0f);
-			P_Treerotation = XMFLOAT3(0.0f, 0.0f, 0.0f);
-			P_TreeScale = XMFLOAT3(1.0f, 1.0f, 1.0f);
-		}
-		ImGui::PopID();
-		ImGui::NewLine();
 		// 색깔
 		const float eps_color = 0.0001f; // 안전 간격
 		//빛벡터
-		ImGui::PushID(4);
+		ImGui::PushID(1);
 		ImGui::Text("Direction");
 		ImGui::DragFloat3("Box1", LightDir1, 0.01f, -1.0f + eps_local, 1.0f - eps_local);
 		if (ImGui::Button("Reset##Direction")) {
@@ -837,7 +860,7 @@ void MeshLoading::RenderGUI()
 		ImGui::NewLine();
 
 		//빛변수
-		ImGui::PushID(5);
+		ImGui::PushID(2);
 		ImGui::Text("Light");
 		ImGui::ColorEdit3("lightambient", L_ambient);
 		ImGui::ColorEdit3("lightdiffuse", L_diffuse);
@@ -850,25 +873,30 @@ void MeshLoading::RenderGUI()
 
 		ImGui::PopID();
 		ImGui::NewLine();
-		ImGui::PushID(6);
+		ImGui::PushID(3);
 
 		ImGui::Checkbox("BlinPhongBlenOff", &BlinPhongTrue);
-		ImGui::DragFloat("CamSpeed", &speed, 0.1f, eps_local, 1000.0f -eps_local);
+		ImGui::DragFloat("CamSpeed", &speed, 0.1f, eps_local, 1000.0f - eps_local);
 		ImGui::DragFloat("ClipValue", &clipValue, 0.001f, eps_local, 0.5f - eps_local);
 
+		double min_val = 0.0;
+
+		ImGui::PopID();
+		ImGui::NewLine();
+		ImGui::PushID(4);
+		ImGui::DragScalar("Time", ImGuiDataType_Double, &currentTime, 0.01f, &min_val, &DurationAnime);
+		ImGui::Checkbox("stop", &stoptime);
 
 		ImGui::PopID();
 
 		ImGui::End();
 	}
 
-
-
 	ImGui::Render();
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 }
 
-bool MeshLoading::InitEffect()
+bool Skeletal::InitEffect()
 {
 	// 2. 파이프라인에 바인딩할 InputLayout 생성
 	D3D11_INPUT_ELEMENT_DESC layout[] =
@@ -878,6 +906,21 @@ bool MeshLoading::InitEffect()
 		{ "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		{ "BINORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+	};
+
+	D3D11_INPUT_ELEMENT_DESC g_BoneLayout[] =
+	{
+		// 기존 정점 정보
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "BINORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+
+		// Bone Index
+		{ "BLENDINDICES", 0, DXGI_FORMAT_R32G32B32A32_UINT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		// Bone Weight (가중치)
+		{ "BLENDWEIGHT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 	};
 
 	ComPtr<ID3DBlob> vertexShaderBuffer = nullptr;
@@ -890,6 +933,12 @@ bool MeshLoading::InitEffect()
 	// 3. 파이프 라인에 바인딩할 정점 셰이더 생성
 	HR_T(m_pDevice->CreateVertexShader(vertexShaderBuffer->GetBufferPointer(), vertexShaderBuffer->GetBufferSize(), NULL, &m_pVertexShader));
 
+	//본 버텍스 셰이더
+	vertexShaderBuffer.Reset();
+	HR_T(CompileShaderFromFile(L"BasicVertexShader.hlsl", "BoneMain", "vs_5_0", vertexShaderBuffer.GetAddressOf()));
+	HR_T(m_pDevice->CreateInputLayout(g_BoneLayout, ARRAYSIZE(g_BoneLayout), vertexShaderBuffer->GetBufferPointer(), vertexShaderBuffer->GetBufferSize(), &m_pBoneInputLayout));
+	HR_T(m_pDevice->CreateVertexShader(vertexShaderBuffer->GetBufferPointer(), vertexShaderBuffer->GetBufferSize(), NULL, &m_pBoneVertexShader));
+	//m_pBoneVertexShader
 	// 5. 파이프라인에 바인딩할 픽셀 셰이더 생성
 	ComPtr<ID3DBlob> pixelShaderBuffer = nullptr;
 	HR_T(CompileShaderFromFile(L"BasicPixelShader.hlsl", "main", "ps_4_0", pixelShaderBuffer.GetAddressOf()));
@@ -905,7 +954,7 @@ bool MeshLoading::InitEffect()
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
-LRESULT MeshLoading::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+LRESULT Skeletal::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	if (ImGui_ImplWin32_WndProcHandler(hWnd, message, wParam, lParam))
 		return 1; // LRESULT 반환
@@ -913,27 +962,23 @@ LRESULT MeshLoading::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPar
 	return __super::WndProc(hWnd, message, wParam, lParam);
 }
 
-void MeshLoading::SetRenderSort()
+void Skeletal::SetRenderSort()
 {
-	float zeldaDistance = P_Zeldaposition.z - m_Position.z;
-	float charDistance = P_Charposition.z - m_Position.z;
-	float treeDistance = P_Treeposition.z - m_Position.z;
-	
-	for (auto& it : renderlist)
-	{
-		if (it.second.get() == m_pZelda.get()) { it.first = zeldaDistance; }
-		else if (it.second.get() == m_pCharacter.get()) { it.first = charDistance; }
-		else if (it.second.get() == m_pTree.get()) { it.first = treeDistance; }
+	//for (auto& it : renderlist)
+	//{
+	//	if (it.second.get() == m_pZelda.get()) { it.first = zeldaDistance; }
+	//	else if (it.second.get() == m_pCharacter.get()) { it.first = charDistance; }
+	//	else if (it.second.get() == m_pTree.get()) { it.first = treeDistance; }
 
-	}
-	sort(renderlist.begin(), renderlist.end(), [](const pair<float, shared_ptr<ModelLoader>>& a, pair<float, shared_ptr<ModelLoader>>& b)
-		{
-			if (a.first != b.first)
-			{
-				return a.first > b.first;
-			}
-			
-			return a.second.get()->Getweight() < b.second.get()->Getweight();
-		});
+	//}
+	//sort(renderlist.begin(), renderlist.end(), [](const pair<float, shared_ptr<ModelLoader>>& a, pair<float, shared_ptr<ModelLoader>>& b)
+	//	{
+	//		if (a.first != b.first)
+	//		{
+	//			return a.first > b.first;
+	//		}
+
+	//		return a.second.get()->Getweight() < b.second.get()->Getweight();
+	//	});
 }
 

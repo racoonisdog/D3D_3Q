@@ -60,17 +60,17 @@ void ModelLoader::Draw(ComPtr<ID3D11DeviceContext>& devcon, ComPtr<ID3D11Buffer>
 		if (meshes_[i].TransMode == Transparency::Opaque)
 		{
 			devcon->OMSetBlendState(blendOff.Get(), nullptr, 0xFFFFFFFF);
-			meshMaterial.UseClip = false;
+			meshMaterial.UseClip = 0;
 		}
 		else if (meshes_[i].TransMode == Transparency::Cutout)
 		{
 			devcon->OMSetBlendState(blendOff.Get(), nullptr, 0xFFFFFFFF);
-			meshMaterial.UseClip = true;
+			meshMaterial.UseClip = 1;
 		}
 		else if (meshes_[i].TransMode == Transparency::AlphaBlend)
 		{
 			devcon->OMSetBlendState(blendOn.Get(), nullptr, sampleMask);
-			meshMaterial.UseClip = false;
+			meshMaterial.UseClip = 0;
 		}
 
 

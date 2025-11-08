@@ -11,31 +11,29 @@ cbuffer ConstantBuffer : register(b0)
     matrix world;
     matrix view;
     matrix projection;
-	matrix worldinverseT;
+    matrix worldinverseT;
 	
     float4 LightDir;
     float4 LightColor;
 	
-	float4 lightambient;
-	float4 lightdiffuse;
-	float4 lightspecular;
-	float3 camPos;
-	float shininess;
-    
-    float clipValue;
-    float3 padding;
-}
+    float4 lightambient;
+    float4 lightdiffuse;
+    float4 lightspecular;
+    float3 camPos;
+    float shininess;
+};
 
 cbuffer MeshConstantBuffer : register(b1)
 {
-	float4 matambient;
-	float4 matdiffuse;
-	float4 matspecular;
-    
-    int UseClip;
-    float3 padding2;
-}
+    float4 matambient;
+    float4 matdiffuse;
+    float4 matspecular;
+};
 
+cbuffer FinalBoneMatrix : register(b2)
+{
+    row_major matrix gFinalBone[128];
+};
 
 struct VShaderIn
 {
@@ -54,6 +52,30 @@ struct VShaderOut
     float3 BiTan : BINORMAL;
     float3 Norm : NORMAL;
 	float3 WorldPos : TEXCOORD1;
+};
+
+
+struct BVSIn
+{
+    float3 pos : POSITION;
+    float2 Tex : TEXCOORD0;
+    float3 Tan : TANGENT;
+    float3 BiTan : BINORMAL;
+    float3 Norm : NORMAL;
+    
+    uint4 BoneIndices : BLENDINDICES;
+    float4 BoneWeights : BLENDWEIGHT;
+};
+
+
+struct BVSOut
+{
+    float4 pos : SV_POSITION;
+    float2 Tex : TEXCOORD0;
+    float3 Tan : TANGENT;
+    float3 BiTan : BINORMAL;
+    float3 Norm : NORMAL;
+    float3 WorldPos : TEXCOORD1;
 };
 
 float3 EncodeNormal(float3 N)
