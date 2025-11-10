@@ -21,29 +21,25 @@ cbuffer ConstantBuffer : register(b0)
     float4 lightspecular;
     float3 camPos;
     float shininess;
-};
+    
+    float clipValue;
+    float3 padding;
+}
 
 cbuffer MeshConstantBuffer : register(b1)
 {
     float4 matambient;
     float4 matdiffuse;
     float4 matspecular;
+    
+    int UseClip;
+    float3 padding2;
 };
 
 cbuffer FinalBoneMatrix : register(b2)
 {
     matrix gFinalBone[128];
 };
-
-//cbuffer FinalBoneMatrix : register(b3)
-//{
-//    row_major matrix OffsetMatrix[128];
-//};
-
-//cbuffer FinalBoneMatrix : register(b4)
-//{
-//    row_major matrix AnimateMatrix[128];
-//};
 
 struct VShaderIn
 {

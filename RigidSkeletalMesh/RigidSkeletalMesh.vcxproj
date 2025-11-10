@@ -161,7 +161,6 @@
   <ItemGroup>
     <ClCompile Include="Animation.cpp" />
     <ClCompile Include="AnimationController.cpp" />
-    <ClCompile Include="AnimSampler.cpp" />
     <ClCompile Include="Skeletal.cpp" />
     <ClCompile Include="ModelLoader.cpp" />
     <ClCompile Include="SkeletonInfo.cpp" />

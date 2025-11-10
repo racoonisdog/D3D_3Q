@@ -158,8 +158,7 @@ void Skeletal::Render()
 
 
 
-	//float t = GameTimer::m_Instance->TotalTime();
-	float t = GameTimer::m_Instance->DeltaTime();
+
 
 	// 픽셀 셰이더 바인딩
 	if (!BlinPhongTrue/* && !alphaTrue*/) { m_pDeviceContext->PSSetShader(m_pPixelShader, nullptr, 0); }
@@ -172,33 +171,28 @@ void Skeletal::Render()
 	m_pDeviceContext->IASetInputLayout(m_pBoneInputLayout.Get());
 
 
+	float t = GameTimer::m_Instance->DeltaTime();
+	//float t = GameTimer::m_Instance->TotalTime();
+
 	if (!stoptime)
 	{
 		currentTime += (double)t;
 	}
 
 	PlaySkinningTest->Update(currentTime);
-	//PlayBoxHuman->Update(t, tempplayname1);
 
 	PlaySkinningTest->GetFinalMatrices(FinalBoneCS.gBoneMatrices);
-	//PlayBoxHuman->SetFinalMatrix(FinalBoneCS.gBoneMatrices);
 
 	m_pDeviceContext->UpdateSubresource(m_pBoneConstantBuffer.Get(), 0, nullptr, &FinalBoneCS, 0, 0);
 	m_pDeviceContext->VSSetConstantBuffers(2, 1, m_pBoneConstantBuffer.GetAddressOf());
 
 	//PlaySkinningTest->SetMatrix(OffsetBoneCS.OffsetMatrix, AnimeBoneCS.AnimateMatrix);
 
-	//상수버퍼
-	//m_pDeviceContext->UpdateSubresource(m_pOffsetBoneConstantBuffer.Get(), 0, nullptr, &FinalBoneCS, 0, 0);
-	//m_pDeviceContext->VSSetConstantBuffers(3, 1, m_pOffsetBoneConstantBuffer.GetAddressOf());
-
-	//m_pDeviceContext->UpdateSubresource(m_pAnimeBoneConstantBuffer.Get(), 0, nullptr, &FinalBoneCS, 0, 0);
-	//m_pDeviceContext->VSSetConstantBuffers(4, 1, m_pAnimeBoneConstantBuffer.GetAddressOf());
-
-
 	////skele
 	XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(m_SkinningTestWorld));
-	XMMATRIX WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, XMMatrixTranspose(m_SkinningTestWorld)));
+	//XMMATRIX WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, XMMatrixTranspose(m_SkinningTestWorld)));
+	XMMATRIX W = m_SkinningTestWorld;
+	XMMATRIX WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, W));
 	XMStoreFloat4x4(&constandices.worldinverseT, WInvT);
 	m_pDeviceContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constandices, 0, 0);
 	////
@@ -213,30 +207,21 @@ void Skeletal::Render()
 	//BoxMan.get()->DrawSkeletal(m_pDeviceContext, m_pMaterialBuffer, m_pBlendON, m_pBlendOFF);
 
 
-	ID3D11Buffer* nullBuffer[1] = { nullptr };
-	m_pDeviceContext->VSSetConstantBuffers(2, 1, nullBuffer); // VS 슬롯 2 해제
+	PlayBoxHuman->Update(currentTime);
+	PlayBoxHuman->GetFinalMatrices(FinalBoneCS.gBoneMatrices);
 
-	// 버텍스 셰이더 바인딩
-	m_pDeviceContext->VSSetShader(m_pVertexShader, nullptr, 0);
-	//입력 레이아웃 바인딩
-	m_pDeviceContext->IASetInputLayout(m_pInputLayout);
-
-
-	////static
-	XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(m_SkinningTestWorld));
-	WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, XMMatrixTranspose(m_SkinningTestWorld)));
+	m_pDeviceContext->UpdateSubresource(m_pBoneConstantBuffer.Get(), 0, nullptr, &FinalBoneCS, 0, 0);
+	m_pDeviceContext->VSSetConstantBuffers(2, 1, m_pBoneConstantBuffer.GetAddressOf());
+	
+	XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(m_BoxManWorld));
+	W = m_BoxManWorld;
+	WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, W));
 	XMStoreFloat4x4(&constandices.worldinverseT, WInvT);
 	m_pDeviceContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constandices, 0, 0);
 	////
-	SkinningTest.get()->DrawStatic(m_pDeviceContext, m_pMaterialBuffer, m_pBlendON, m_pBlendOFF);
-	////
-	//XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(m_BoxManWorld));
-	//WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, XMMatrixTranspose(m_BoxManWorld)));
-	//XMStoreFloat4x4(&constandices.worldinverseT, WInvT);
-	//m_pDeviceContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constandices, 0, 0);
-	//////
-	//BoxMan.get()->DrawStatic(m_pDeviceContext, m_pMaterialBuffer, m_pBlendON, m_pBlendOFF);
-	
+	BoxMan.get()->DrawSkeletal(m_pDeviceContext, m_pMaterialBuffer, m_pBlendON, m_pBlendOFF);
+
+
 
 	RenderSkyBox();
 	RenderGUI();
@@ -415,41 +400,56 @@ bool Skeletal::InitScene()
 
 
 	// 모델 생성
+	
+	
+
 
 	SkinningTest = std::make_shared<ModelLoader>();
+	SkinningTest.get()->SetMergeValue(false);
 	if (!SkinningTest->Load(m_hWnd, m_pDevice.Get(), m_pDeviceContext.Get(), "resource\\SkinningTest.fbx", 0))
 	{
 		MessageBox(m_hWnd, L"FBX couldn't be loaded ", NULL, MB_ICONERROR | MB_OK);
 	}
-	//BoxMan = std::make_unique<ModelLoader>();
-	//if (!BoxMan->Load(m_hWnd, m_pDevice.Get(), m_pDeviceContext.Get(), "resource\\BoxHuman.fbx", 0))
-	//{
-	//	MessageBox(m_hWnd, L"FBX couldn't be loaded ", NULL, MB_ICONERROR | MB_OK);
-	//}
+	BoxMan = std::make_unique<ModelLoader>();
+	BoxMan.get()->SetMergeValue(false);
+	if (!BoxMan->Load(m_hWnd, m_pDevice.Get(), m_pDeviceContext.Get(), "resource\\BoxHuman.fbx", 0))
+	{
+		MessageBox(m_hWnd, L"FBX couldn't be loaded ", NULL, MB_ICONERROR | MB_OK);
+	}
 
-	//size_t BoxManSize = BoxMan.get()->GetAnimeName()->size();
+	size_t BoxManSize = BoxMan.get()->GetAnimeName()->size();
 	size_t SkinningTestSize = SkinningTest.get()->GetAnimeName()->size();
 
-	//animelist_BoxHuman.resize(BoxManSize);
+	animelist_BoxHuman.resize(BoxManSize);
 	animelist_SkinningTest.resize(SkinningTestSize);
 
-	//copy(BoxMan.get()->GetAnimeName()->begin(), BoxMan.get()->GetAnimeName()->end(), animelist_BoxHuman.begin());
+	copy(BoxMan.get()->GetAnimeName()->begin(), BoxMan.get()->GetAnimeName()->end(), animelist_BoxHuman.begin());
 	copy(SkinningTest.get()->GetAnimeName()->begin(), SkinningTest.get()->GetAnimeName()->end(), animelist_SkinningTest.begin());
 	
-	//PlayBoxHuman = new AnimationController();
+	PlayBoxHuman = new AnimationController();
 	PlaySkinningTest = new AnimationController();
 
-	//PlayBoxHuman->Initialize(&BoxMan->Getanimelist(), BoxMan.get()->GetSkeletonInfo());
+	PlayBoxHuman->Initialize(BoxMan.get()->GetSkeletonInfo());
+	PlayBoxHuman->SetClipTable(&BoxMan->Getanimelist());
+	
 	PlaySkinningTest->Initialize(SkinningTest.get()->GetSkeletonInfo());
 	PlaySkinningTest->SetClipTable(&SkinningTest->Getanimelist());
 	
+	
+	//tempplayname1 = string("MasterAnimation");
+	tempplayname1 = animelist_BoxHuman[0];
 
-	//tempplayname1 = animelist_BoxHuman[0];
 	tempplayname2 = animelist_SkinningTest[0];
+	
 	PlaySkinningTest->SetClipByName(tempplayname2);
+	
+	PlayBoxHuman->SetClipByName(tempplayname1);
 
 	DurationAnime = SkinningTest.get()->GetAnimation(tempplayname2)->GetDurationTicks();
 	TicksPerSecond = SkinningTest.get()->GetAnimation(tempplayname2)->GetTicksPerSecond();
+
+	DurationAnime2 = BoxMan.get()->GetAnimation(tempplayname1)->GetDurationTicks();
+	TicksPerSecond2 = BoxMan.get()->GetAnimation(tempplayname1)->GetTicksPerSecond();
 
 	constandices.lightambient = { 0.04f, 0.04f, 0.04f, 1.0f }; // 환경광
 	constandices.lightdiffuse = { 1.00f, 1.00f, 1.00f, 1.0f }; // 난반사 색
@@ -886,6 +886,38 @@ void Skeletal::RenderGUI()
 		ImGui::PushID(4);
 		ImGui::DragScalar("Time", ImGuiDataType_Double, &currentTime, 0.01f, &min_val, &DurationAnime);
 		ImGui::Checkbox("stop", &stoptime);
+
+
+		ImGui::PopID();
+		ImGui::NewLine();
+
+		// Zelda
+		ImGui::PushID(5);
+		ImGui::Text("SkinningModel");
+		ImGui::DragFloat3("Position", &P_SkinningTestposition.x, 0.05f, -1000.0f, 1000.0f);
+		ImGui::DragFloat3("Rotation", &P_SkinningTestrotation.x, 0.05f, -1000.0f, 1000.0f);
+		ImGui::DragFloat3("Scale", &P_SkinningTestScale.x, 0.001f, -1000.0f, 1000.0f);
+		if (ImGui::Button("Reset##Skinning")) {
+			P_SkinningTestposition = XMFLOAT3(5.0f, 0.0f, 5.0f);
+			P_SkinningTestrotation = XMFLOAT3(0.0f, 0.0f, 0.0f);
+			P_SkinningTestScale = XMFLOAT3(0.01f, 0.01f, 0.01f);
+		}
+
+		ImGui::PopID();
+		ImGui::NewLine();
+
+		// Zelda
+		ImGui::PushID(6);
+		ImGui::Text("BoxMan");
+		ImGui::DragFloat3("Position", &P_BoxManposition.x, 0.05f, -1000.0f, 1000.0f);
+		ImGui::DragFloat3("Rotation", &P_BoxManrotation.x, 0.05f, -1000.0f, 1000.0f);
+		ImGui::DragFloat3("Scale", &P_BoxManScale.x, 0.001f, -1000.0f, 1000.0f);
+		if (ImGui::Button("Reset##BoxMan")) {
+			P_BoxManposition = XMFLOAT3(-5.0f, 0.0f, 5.0f);
+			P_BoxManrotation = XMFLOAT3(0.0f, 0.0f, 0.0f);
+			P_BoxManScale = XMFLOAT3(0.01f, 0.01f, 0.01f);
+		}
+
 
 		ImGui::PopID();
 

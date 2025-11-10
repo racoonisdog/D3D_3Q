@@ -239,7 +239,7 @@ public:
 	Vector3    m_UIRotPrev = { 0,0,0 };
 
 	float speed = 20.0f;
-	bool BlinPhongTrue = false;
+	bool BlinPhongTrue = true;
 
 	//랜더링 순서 계산 함수와 변수
 	void SetRenderSort();
@@ -284,5 +284,10 @@ public:
 	double TicksPerSecond;
 	double currentTime;
 	bool stoptime = false;
+
+	double DurationAnime2;
+	double TicksPerSecond2;
+	double currentTime2;
+	bool stoptime2 = false;
 
 };

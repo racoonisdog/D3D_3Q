@@ -101,8 +101,5 @@
     <ClCompile Include="AnimationController.cpp">
       <Filter>Instance</Filter>
     </ClCompile>
-    <ClCompile Include="AnimSampler.cpp">
-      <Filter>Utils</Filter>
-    </ClCompile>
   </ItemGroup>
 </Project>

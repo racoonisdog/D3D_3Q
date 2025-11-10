@@ -46,21 +46,52 @@ bool ModelLoader::Load(HWND hwnd, ID3D11Device* dev, ID3D11DeviceContext* devcon
 
 	LoadSkeleton(pScene, skel);
 
+	if (skel.Bones.empty())
+	{
+		// A. 뼈는 없지만 애니메이션이 존재하는 경우 (BoxMan과 같은 Rigid 애니메이션)
+		if (pScene->HasAnimations())
+		{
+			// 뼈가 없는 애니메이션 모델 플래그 설정 (선택 사항)
+			isSkeletal = true;
+			dummyBone = true;
 
-	if (!skel.Bones.empty()) {
-		skel.CalculateGlobalInverseRoot();
-	}
+			LoadNodeHierarchy(pScene->mRootNode, -1, skel.Bones, skel.m_BoneMappingTable);
 
-	processNode(pScene->mRootNode, pScene);
+			for (unsigned int i = 0; i < pScene->mNumMeshes; i++) {
+				aiMesh* mesh = pScene->mMeshes[i];
+				std::string meshName = mesh->mName.C_Str();
 
+				// 기존에 로드된 뼈 이름-인덱스 테이블을 사용
+				auto it = skel.m_BoneMappingTable.find(meshName);
 
-	if (skel.Bones.empty()) {
-		isSkeletal = false;
+				if (it != skel.m_BoneMappingTable.end()) {
+					int boneIndex = it->second;
+					// 메시 인덱스(i)와 해당 메시를 제어할 뼈 인덱스를 매핑
+					rigidMeshToBoneMap[i] = boneIndex;
+				}
+				else {
+					// 메시 이름과 일치하는 뼈가 없는 경우 (예: Scene Root)
+					// 이 메시는 0번 뼈 (RootNode)를 사용하도록 폴백 (Fallback) 처리
+					rigidMeshToBoneMap[i] = 0;
+				}
+			}
+
+		}
+		else
+		{
+			isSkeletal = false; // 정적 오브젝트로 처리
+		}
 	}
 	else
 	{
+		//뼈가 존재함(애니메이션도 존재)
 		isSkeletal = true;
+		dummyBone = false;
 	}
+
+
+
+	processNode(pScene->mRootNode, pScene);
 
 	if (pScene->HasAnimations())
 	{
@@ -79,6 +110,42 @@ bool ModelLoader::Load(HWND hwnd, ID3D11Device* dev, ID3D11DeviceContext* devcon
 		}
 	}
 
+	if (m_bNeedsMerge && animelist.size() > 1)
+	{
+		// 1. Master Animation 생성
+		Animation* masterAnim = new Animation();
+		masterAnim->GetName() = string("MasterAnimation");
+
+		double maxDuration = 0.0;
+
+		// 2. 모든 조각난 클립을 MasterAnim에 병합
+		for (auto const& pair : animelist)
+		{
+			const Animation* rawAnim = pair.second;
+			masterAnim->MergeChannels(rawAnim); // Animation::MergeChannels 사용
+
+			// 2. 재생 시간 업데이트 (가장 긴 클립의 정보를 사용)
+			if (rawAnim->GetDurationTicks() > maxDuration)
+			{
+				maxDuration = rawAnim->GetDurationTicks();
+
+				// masterAnim->CreateFromAi(rawAnim); 
+				masterAnim->SetTicksPerSecond(rawAnim->GetTicksPerSecond());
+			}
+			delete rawAnim; // 기존 클립 메모리 해제
+		}
+		masterAnim->SetDurationTicks(maxDuration);
+
+		// 3. 리스트를 비우고 MasterAnimation만 남김
+		animelist.clear();
+		animelist["MasterAnimation"] = masterAnim;
+	}
+
+	Animation* masterAnim = animelist.begin()->second; // MasterAnimation 포인터 획득
+	// 뼈대가 총 70개라면 70에 가까운 숫자가 나와야 합니다.
+	size_t a =  masterAnim->m_Channels.size();
+	int b = 2;
+
 	return true;
 }
 
@@ -89,9 +156,6 @@ void ModelLoader::DrawSkeletal(ComPtr<ID3D11DeviceContext>& devcon, ComPtr<ID3D1
 	for (size_t i = 0; i < skeletalMeshes.size(); ++i) {
 
 		Material meshMaterial = skeletalMeshes[i].GetMaterial();
-		meshMaterial.ambient = m_Ambient;
-		meshMaterial.diffuse = m_Diffuse;
-		meshMaterial.specular = m_Specular;
 
 		UINT sampleMask = 0xffffffff;
 		//여기에 mesh의 enum클레스 확인후 넘겨줄값 설정 //알파블랜딩 사용여부 및 clip 사용유무까지
@@ -126,9 +190,6 @@ void ModelLoader::DrawStatic(ComPtr<ID3D11DeviceContext>& devcon, ComPtr<ID3D11B
 	for (size_t i = 0; i < staticMeshes.size(); ++i) {
 
 		Material meshMaterial = staticMeshes[i].GetMaterial();
-		meshMaterial.ambient = m_Ambient;
-		meshMaterial.diffuse = m_Diffuse;
-		meshMaterial.specular = m_Specular;
 
 		UINT sampleMask = 0xffffffff;
 		//여기에 mesh의 enum클레스 확인후 넘겨줄값 설정 //알파블랜딩 사용여부 및 clip 사용유무까지
@@ -162,7 +223,10 @@ Mesh<VERTEX> ModelLoader::processMesh(aiMesh* mesh, const aiScene* scene) {
 	std::vector<VERTEX> vertices;
 	std::vector<UINT> indices;				//최종 인덱스 버퍼 배열
 	std::vector<Texture> textures;
-
+	Material tempMaterial;
+	tempMaterial.ambient = { 0.1f, 0.1f, 0.1f, 1.0f }; // 기본 Ambient
+	tempMaterial.diffuse = { 1.0f, 1.0f, 1.0f, 1.0f }; // 기본 Diffuse
+	tempMaterial.specular = { 0.0f, 0.0f, 0.0f, 1.0f }; // 기본 Specular
 
 	for (UINT i = 0; i < mesh->mNumVertices; i++) {
 		VERTEX vertex;
@@ -185,6 +249,7 @@ Mesh<VERTEX> ModelLoader::processMesh(aiMesh* mesh, const aiScene* scene) {
 		}
 
 
+
 		vertices.push_back(vertex);
 	}
 
@@ -198,6 +263,31 @@ Mesh<VERTEX> ModelLoader::processMesh(aiMesh* mesh, const aiScene* scene) {
 			indices.push_back(face.mIndices[j]);
 		}
 	}
+
+	if (mesh->mMaterialIndex >= 0) {
+		aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
+		aiColor4D color;
+
+
+		// Diffuse 색상 추출
+		if (AI_SUCCESS == material->Get(AI_MATKEY_COLOR_DIFFUSE, color)) {
+			tempMaterial.diffuse = { color.r, color.g, color.b, color.a };
+		}
+		// Ambient 색상 추출
+		if (AI_SUCCESS == material->Get(AI_MATKEY_COLOR_AMBIENT, color)) {
+			tempMaterial.ambient = { color.r, color.g, color.b, color.a };
+		}
+		// Specular 색상 추출 및 Shininess(파워)
+		float shininess = 0.0f;
+		if (AI_SUCCESS == material->Get(AI_MATKEY_COLOR_SPECULAR, color)) {
+			tempMaterial.specular = { color.r, color.g, color.b, color.a };
+		}
+		if (AI_SUCCESS == material->Get(AI_MATKEY_SHININESS, shininess)) {
+			tempMaterial.specular.w = shininess; // Specular의 w 컴포넌트를 Shininess로 사용 (필요하다면)
+		}
+
+	}
+
 
 	if (mesh->mMaterialIndex >= 0) {
 		aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
@@ -270,15 +360,19 @@ Mesh<VERTEX> ModelLoader::processMesh(aiMesh* mesh, const aiScene* scene) {
 	}
 
 
-	return Mesh<VERTEX>(dev_, vertices, indices, textures, T_Mod);
+	return Mesh<VERTEX>(dev_, vertices, indices, textures, T_Mod, tempMaterial);
 }
 
 Mesh<BONEVERTEX> ModelLoader::processMesh(aiMesh* mesh, const aiScene* scene, int meshIndex)
 {
 	// Data to fill
-	std::vector<BONEVERTEX> vertices;
-	std::vector<UINT> indices;				//최종 인덱스 버퍼 배열
-	std::vector<Texture> textures;
+	vector<BONEVERTEX> vertices;
+	vector<UINT> indices;				//최종 인덱스 버퍼 배열
+	vector<Texture> textures;
+	Material tempMaterial;
+	tempMaterial.ambient = { 0.1f, 0.1f, 0.1f, 1.0f }; // 기본 Ambient
+	tempMaterial.diffuse = { 1.0f, 1.0f, 1.0f, 1.0f }; // 기본 Diffuse
+	tempMaterial.specular = { 0.0f, 0.0f, 0.0f, 1.0f }; // 기본 Specular
 
 
 	for (UINT i = 0; i < mesh->mNumVertices; i++) {
@@ -302,6 +396,9 @@ Mesh<BONEVERTEX> ModelLoader::processMesh(aiMesh* mesh, const aiScene* scene, in
 		}
 
 
+		vertex.BLENDINDICES = XMUINT4(0, 0, 0, 0);
+		vertex.BLENDWEIGHT = XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
+
 		vertices.push_back(vertex);
 	}
 
@@ -318,6 +415,25 @@ Mesh<BONEVERTEX> ModelLoader::processMesh(aiMesh* mesh, const aiScene* scene, in
 
 	if (mesh->mMaterialIndex >= 0) {
 		aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
+		aiColor4D color;
+
+
+		// Diffuse 색상 추출
+		if (AI_SUCCESS == material->Get(AI_MATKEY_COLOR_DIFFUSE, color)) {
+			tempMaterial.diffuse = { color.r, color.g, color.b, color.a };
+		}
+		// Ambient 색상 추출
+		if (AI_SUCCESS == material->Get(AI_MATKEY_COLOR_AMBIENT, color)) {
+			tempMaterial.ambient = { color.r, color.g, color.b, color.a };
+		}
+		// Specular 색상 추출 및 Shininess(파워)
+		float shininess = 0.0f;
+		if (AI_SUCCESS == material->Get(AI_MATKEY_COLOR_SPECULAR, color)) {
+			tempMaterial.specular = { color.r, color.g, color.b, color.a };
+		}
+		if (AI_SUCCESS == material->Get(AI_MATKEY_SHININESS, shininess)) {
+			tempMaterial.specular.w = shininess; // Specular의 w 컴포넌트를 Shininess로 사용 (필요하다면)
+		}
 
 		//데이터를 읽어왔을때 존재하지 않을 경우 기본 옵션 사용할수 있도록
 		std::vector<Texture> diffuseMaps = this->loadMaterialTextures(material, aiTextureType_DIFFUSE, "DIFFUSE", scene);
@@ -386,6 +502,25 @@ Mesh<BONEVERTEX> ModelLoader::processMesh(aiMesh* mesh, const aiScene* scene, in
 		T_Mod = Transparency::Opaque;
 	}
 
+	if (dummyBone)
+	{
+		int targetBoneIndex = 0;
+
+		auto it = this->rigidMeshToBoneMap.find(meshIndex);
+		if (it != this->rigidMeshToBoneMap.end())
+		{
+			targetBoneIndex = it->second;
+		}
+
+
+		for (UINT v = 0; v < mesh->mNumVertices; v++)
+		{
+			vertices[v].BLENDINDICES = XMUINT4(targetBoneIndex, 0, 0, 0);
+			vertices[v].BLENDWEIGHT = XMFLOAT4(1.0f, 0.0f, 0.0f, 0.0f);
+		}
+	}
+
+
 	if (mesh->HasBones())
 	{
 		auto it = skel.m_MeshBoneData.find(meshIndex);
@@ -407,7 +542,7 @@ Mesh<BONEVERTEX> ModelLoader::processMesh(aiMesh* mesh, const aiScene* scene, in
 		}
 	}
 
-	return Mesh<BONEVERTEX>(dev_, vertices, indices, textures, T_Mod);
+	return Mesh<BONEVERTEX>(dev_, vertices, indices, textures, T_Mod , tempMaterial);
 }
 
 std::vector<Texture> ModelLoader::loadMaterialTextures(aiMaterial* mat, aiTextureType type, std::string typeName, const aiScene* scene) {
@@ -532,10 +667,12 @@ void ModelLoader::LoadSkeleton(const aiScene* scene, SkeletonInfo& skelinfo)
 		if (it != skelinfo.m_BoneMappingTable.end()) {
 			currentBoneIndex = it->second;
 
-			skelinfo.Bones[currentBoneIndex].BindLocal = ConvertAiMatrixToDXMatrix(node->mTransformation);
+			Matrix f = ConvertAiMatrixToDXMatrix(node->mTransformation);
+			skelinfo.Bones[currentBoneIndex].BindLocal = f;
+
 			skelinfo.Bones[currentBoneIndex].ParentIndex = parentBoneIndex;
 
-			parentBoneIndex = currentBoneIndex; // 자식에게 내려갈 부모 갱신
+			parentBoneIndex = currentBoneIndex;
 		}
 
 		for (UINT i = 0; i < node->mNumChildren; ++i)
@@ -572,8 +709,8 @@ void ModelLoader::LoadSkeleton(const aiScene* scene, SkeletonInfo& skelinfo)
 			int boneIndex = it->second;
 
 			// Offset: 처음 한 번만 세팅(루트는 필요시 Identity 유지 테스트 권장)
-			Matrix off = ConvertAiMatrixToDXMatrix(b->mOffsetMatrix);
 			if (skelinfo.Bones[boneIndex].OffsetTransform == Matrix::Identity) {
+				Matrix off = ConvertAiMatrixToDXMatrix(b->mOffsetMatrix);
 				skelinfo.Bones[boneIndex].OffsetTransform = off;
 			}
 			else {
@@ -601,8 +738,19 @@ void ModelLoader::LoadSkeleton(const aiScene* scene, SkeletonInfo& skelinfo)
 				float inv = 1.0f / sum;
 				for (int k = 0; k < 4; ++k) v.BoneWeights[k] *= inv;
 			}
+			else {
+				// 어떤 뼈에도 배정되지 않은 정점은 루트 100%로 고정
+				// (루트 인덱스가 0이 아니라면 실제 루트 인덱스로 바꿔줄 것)
+				v.BoneIndices[0] = 0;
+				v.BoneWeights[0] = 1.0f;
+				v.BoneIndices[1] = v.BoneIndices[2] = v.BoneIndices[3] = 0;
+				v.BoneWeights[1] = v.BoneWeights[2] = v.BoneWeights[3] = 0.0f;
+			}
+
 		}
 	}
+
+	skelinfo.DebugValidateBindPoseOnce();
 }
 
 SkeletonInfo* ModelLoader::GetSkeletonInfo()
@@ -638,19 +786,45 @@ bool ModelLoader::HasAnimations() const
 	return !animelist.empty();
 }
 
+void ModelLoader::LoadNodeHierarchy(const aiNode* node, int parentBoneIndex, vector<BoneInfo>& outBones, map<string, int>& outBoneMappingTable)
+{
+	BoneInfo newBone;
+	newBone.Name = node->mName.C_Str();
+	newBone.ParentIndex = parentBoneIndex;
+
+	// aiMatrix4x4를 사용하는 Matrix 타입으로 변환 (변환 함수가 있다고 가정)
+	newBone.BindLocal = ConvertAiMatrixToDXMatrix(node->mTransformation);
+
+	//  BoxMan의 핵심: 스키닝이 없으므로 Offset은 Identity로 설정
+	// (Final = GBT * Offset 이므로, GBT만 사용하게 됨)
+	newBone.OffsetTransform = Matrix::Identity;
+
+	// (선택 사항) GBT 계산에 필요한 BindGlobal 계산을 할 수도 있으나,
+	// AnimationController의 GBT 누적 로직이 이를 대신합니다.
+
+	outBones.push_back(newBone);
+
+
+	int currentBoneIndex = (int)outBones.size() - 1;
+
+	outBoneMappingTable[newBone.Name] = currentBoneIndex;
+
+	// 자식 노드를 순회하며 재귀 호출
+	for (UINT i = 0; i < node->mNumChildren; ++i)
+	{
+		// 현재 노드의 인덱스를 자식의 ParentIndex로 전달
+		LoadNodeHierarchy(node->mChildren[i], currentBoneIndex, outBones, outBoneMappingTable);
+	}
+}
+
 XMFLOAT4X4 ModelLoader::ConvertAiMatrixToDXMatrix(const aiMatrix4x4& aiM)
 {
 	DirectX::XMFLOAT4X4 convertmatrix;
-	// Assimp는 Column-Major 배열에 저장됩니다.
-	// DirectX의 XMFLOAT4X4 (행렬)에 저장할 때 전치(Transpose)를 수행합니다.
 
-	// 첫 번째 열 -> 첫 번째 행
+
 	convertmatrix._11 = aiM.a1; convertmatrix._12 = aiM.b1; convertmatrix._13 = aiM.c1; convertmatrix._14 = aiM.d1;
-	// 두 번째 열 -> 두 번째 행
 	convertmatrix._21 = aiM.a2; convertmatrix._22 = aiM.b2; convertmatrix._23 = aiM.c2; convertmatrix._24 = aiM.d2;
-	// 세 번째 열 -> 세 번째 행
 	convertmatrix._31 = aiM.a3; convertmatrix._32 = aiM.b3; convertmatrix._33 = aiM.c3; convertmatrix._34 = aiM.d3;
-	// 네 번째 열 -> 네 번째 행 (변환/위치)
 	convertmatrix._41 = aiM.a4; convertmatrix._42 = aiM.b4; convertmatrix._43 = aiM.c4; convertmatrix._44 = aiM.d4;
 
 	return convertmatrix;
@@ -698,7 +872,7 @@ void ModelLoader::processNode(aiNode* node, const aiScene* scene) {
 	for (UINT i = 0; i < node->mNumMeshes; i++) {
 		int meshIndex = node->mMeshes[i]; // scene 전체 기준 인덱스
 		aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
-		if (mesh->HasBones())
+		if (isSkeletal)
 		{
 			// 스키닝 메시
 				skeletalMeshes.push_back(this->processMesh(mesh, scene, meshIndex));
@@ -778,6 +952,11 @@ Texture ModelLoader::loadDefaultTexture(const std::string& filename, const std::
 	std::wstring fullPathWS = std::wstring(fullPath.begin(), fullPath.end());
 
 	hr = CreateWICTextureFromFile(dev_.Get(), devcon_.Get(), fullPathWS.c_str(), nullptr, &texture.texture);
+
+	if (FAILED(hr)) {
+		std::wstring msg = L"Failed to load default texture: " + fullPathWS + L" HRESULT: " + std::to_wstring(hr);
+		MessageBox(NULL, msg.c_str(), L"Texture Load Error", MB_ICONERROR | MB_OK);
+	}
 
 	texture.type = typeName;
 	texture.path = filename; // 경로를 파일명으로 저장

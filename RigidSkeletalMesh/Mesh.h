@@ -46,9 +46,6 @@ struct BONEVERTEX {
     Vector3 bitangent;
     Vector3 normal;
 
-    //int BLENDINDICES[4] = {};       //참조하는 본의 인덱스의 범위는 최대 128개
-    //float BLENDWEIGHT[4] = {};      //가중치 종합은 1이 되어야함
-
     XMUINT4 BLENDINDICES;
     XMFLOAT4 BLENDWEIGHT;
 };
@@ -82,11 +79,12 @@ public:
     ComPtr<ID3D11Device> dev_;
     Transparency TransMode = Transparency::Opaque;
 
-     Mesh(ComPtr<ID3D11Device> dev, const std::vector<V>& vertices, const std::vector<UINT>& indices, const std::vector<Texture>& textures, Transparency tmod) :
+    Mesh(ComPtr<ID3D11Device> dev, const std::vector<V>& vertices, const std::vector<UINT>& indices, const std::vector<Texture>& textures, Transparency tmod, Material _materia = {}) :
         vertices_(vertices),
         indices_(indices),
         textures_(textures),
         dev_(dev),
+         material(_materia),
         TransMode(tmod),
         VertexBuffer{},
          IndexBuffer{} {
@@ -99,8 +97,8 @@ public:
         UINT offset = 0;
 
         //DIFFUSE, EMISSIVE, NORMALS, SPECULAR 리소스 4개 사용을 위해 비워두는 작업
-        //ID3D11ShaderResourceView* Ps_sr[4] = { nullptr };
-        //devcon->PSSetShaderResources(0, 4, Ps_sr);
+        ID3D11ShaderResourceView* Ps_sr[4] = { nullptr };
+        devcon->PSSetShaderResources(0, 4, Ps_sr);
 
         devcon->IASetVertexBuffers(0, 1, VertexBuffer.GetAddressOf(), &stride, &offset);
         devcon->IASetIndexBuffer(IndexBuffer.Get(), DXGI_FORMAT_R32_UINT, 0);

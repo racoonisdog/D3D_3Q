@@ -52,6 +52,14 @@ public:
 	bool HasAnimations() const;
 
 
+	void LoadNodeHierarchy(
+		const aiNode* node,
+		int parentBoneIndex,
+		vector<BoneInfo>& outBones,
+		map<string, int>& outBoneMappingTable);
+
+	void SetMergeValue(bool value) { m_bNeedsMerge = value; };
+
 private:
 	ComPtr<ID3D11Device> dev_{};
 	ComPtr<ID3D11DeviceContext> devcon_{};
@@ -70,6 +78,8 @@ private:
 	//애니메이션 리스트 이름
 	vector<string> animeName{};
 
+	//rigid용 변수
+	bool dummyBone = false;
 
 	XMFLOAT4X4 ConvertAiMatrixToDXMatrix(const aiMatrix4x4& aiM);
 	
@@ -85,6 +95,10 @@ private:
 
 	ID3D11ShaderResourceView* loadEmbeddedTexture(const aiTexture* embeddedTexture, ComPtr<ID3D11ShaderResourceView>& o_texture);
 	
+	map<int, int> rigidMeshToBoneMap{};
+
+	bool m_bNeedsMerge = false;
+
 };
 
 #endif // !MODEL_LOADER_H
