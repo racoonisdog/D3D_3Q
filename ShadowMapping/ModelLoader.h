@@ -60,6 +60,8 @@ public:
 
 	void SetMergeValue(bool value) { m_bNeedsMerge = value; };
 
+	void SetPSValue(bool value) { m_UsePSShader = value; }
+
 private:
 	ComPtr<ID3D11Device> dev_{};
 	ComPtr<ID3D11DeviceContext> devcon_{};
@@ -98,6 +100,8 @@ private:
 	map<int, int> rigidMeshToBoneMap{};
 
 	bool m_bNeedsMerge = false;
+
+	bool m_UsePSShader = false;
 
 };
 

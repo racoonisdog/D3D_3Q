@@ -64,10 +64,10 @@ VShaderOut BoneMain(BVSIn vIn)
     }
     
     [unroll]
-    for (int i = 0; i < 4; ++i)
+    for (int j = 0; j < 4; ++j)
     {
-        uint boneindex = vIn.BoneIndices[i];
-        float weights = vIn.BoneWeights[i];
+        uint boneindex = vIn.BoneIndices[j];
+        float weights = vIn.BoneWeights[j];
         
         // 정규화된 가중치 (weights * invSumW)를 사용
         if (weights > 1e-6 && boneindex < BoneCount)
@@ -132,4 +132,73 @@ VShaderOut BoneMain(BVSIn vIn)
     VerTOut.Tex = vIn.Tex;
 
     return VerTOut;
+}
+
+
+VShaderOut Shadow(BVSIn vIn)
+{
+    BVSOut VerTOut = (BVSOut) 0; // 출력 구조체 초기화
+    
+    static const uint BoneCount = 128;
+    float4x4 skinningMatrix = 0;
+    float sumW = 0;
+
+    [unroll]
+    for (int i = 0; i < 4; ++i)
+    {
+        sumW += vIn.BoneWeights[i];
+    }
+    
+    float invSumW;
+    if (sumW > 1e-6)
+    {
+        invSumW = 1.0f / sumW;
+    }
+    else
+    {
+        invSumW = 0.0f;
+    }
+    
+    [unroll]
+    for (int i = 0; i < 4; ++i)
+    {
+        uint boneindex = vIn.BoneIndices[i];
+        float weights = vIn.BoneWeights[i];
+        
+        if (weights > 1e-6 && boneindex < BoneCount)
+        {
+            // gFinalBone은 상수 버퍼에서 가져온 최종 뼈대 행렬
+            skinningMatrix += (gFinalBone[boneindex] * weights * invSumW);
+        }
+    }
+
+    if (invSumW == 0.0f)
+    {
+        skinningMatrix = float4x4(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+    }
+
+    float4 localPos = float4(vIn.pos, 1.0);
+    float4 skinned = mul(localPos, skinningMatrix);
+    
+    
+    float4 worldPos = mul(skinned, world);
+    VerTOut.pos = mul(mul(worldPos, ShadowView), ShadowProjection);
+    
+    return VerTOut;
+}
+
+VShaderOut Shadowmain(VShaderIn vIn)
+{
+    VShaderOut vOut;
+    
+    // 1. World 변환 (오브젝트 공간 -> 월드 공간)
+    float4 worldPos = mul(float4(vIn.pos, 1.0f), world);
+
+
+    float4 lightViewPos = mul(worldPos, ShadowView);
+    vOut.pos = mul(lightViewPos, ShadowProjection);
+    
+    //노멀, 탄젠트, 텍스처 좌표 등은 깊이 맵에는 필요 없으므로 계산하지 않습니다.
+
+    return vOut;
 }

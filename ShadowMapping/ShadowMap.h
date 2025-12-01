@@ -11,6 +11,7 @@
 #include <algorithm>
 #include "ModelLoader.h"
 #include "AnimationController.h"
+#include "../Common/DebugDraw.h"
 
 
 using namespace DirectX::SimpleMath;
@@ -26,6 +27,23 @@ struct VertexSky
 	Vector3 position;		// 정점 위치
 	VertexSky(Vector3 _position) : position(_position) {};
 };
+
+
+struct FloorVertex
+{
+	XMFLOAT3 pos;
+	XMFLOAT2 Tex;
+	XMFLOAT3 Tan;
+	XMFLOAT3 BiTan;
+	XMFLOAT3 Norm;
+};
+
+struct SetPSValue
+{
+	int Setvalue = 0;
+	Vector3 padding;
+};
+
 
 struct Constant
 {
@@ -54,15 +72,6 @@ struct FinalBoneMatrix
 	Matrix gBoneMatrices[128];
 };
 
-struct OffsetBoneMatrix
-{
-	Matrix OffsetMatrix[128];
-};
-
-struct AnimateBoneMatrix
-{
-	Matrix AnimateMatrix[128];
-};
 
 struct SkyConstant
 {
@@ -71,11 +80,12 @@ struct SkyConstant
 	XMFLOAT4X4 projection;
 };
 
-struct ShadowViewSize
+struct TransformVP
 {
-	float Width;
-	float Height;
+	XMFLOAT4X4 ShadowView;
+	XMFLOAT4X4 ShadowProjection;
 };
+
 
 class ShadowMap : public GameApp
 {
@@ -86,6 +96,8 @@ public:
 	// Model
 	std::shared_ptr<ModelLoader> BoxMan = nullptr;
 	std::shared_ptr<ModelLoader> SkinningTest = nullptr;
+	std::shared_ptr<ModelLoader> Table = nullptr;
+	std::shared_ptr<ModelLoader> Box = nullptr;
 
 
 
@@ -100,6 +112,8 @@ public:
 	// 렌더링 파이프라인에 적용하는  객체와 정보
 	ID3D11VertexShader* m_pVertexShader = nullptr;		// 정점 셰이더.
 	ComPtr<ID3D11VertexShader> m_pBoneVertexShader = nullptr;		// 정점 셰이더.
+	ComPtr<ID3D11VertexShader> m_pShadowVertexShader = nullptr;		// 정점 셰이더.
+	ComPtr<ID3D11VertexShader> m_NormalShadowVertexShader = nullptr;		// 정점 셰이더.
 	ID3D11PixelShader* m_pPixelShader = nullptr;		// 픽셀 셰이더.	
 	ComPtr<ID3D11PixelShader> m_pBlinnPhongShader = nullptr;		// 픽셀 셰이더.	
 	ID3D11PixelShader* m_pPixelShaderSolid = nullptr;	//단일 색상 픽셀 셰이더
@@ -198,7 +212,7 @@ public:
 
 	float LightColor1[3] = { 1.0f, 1.0f, 1.0f };
 
-	float LightDir1[3] = { 1.0f, 0.0f, 0.0f };
+	float LightDir1[3] = { 0.0f, -1.0f, 0.0f };
 
 	ComPtr<ID3D11VertexShader> S_VertexShader;
 	ComPtr<ID3D11PixelShader> S_PixelShader;
@@ -264,27 +278,41 @@ public:
 	string tempplayname2{};
 
 	FinalBoneMatrix FinalBoneCS{};
-	OffsetBoneMatrix OffsetBoneCS{};
-	AnimateBoneMatrix AnimeBoneCS{};
+	TransformVP ShadowVP{};
+	SetPSValue SetPSV{};
 
 	ComPtr<ID3D11Buffer> m_pBoneConstantBuffer = nullptr;			// 뼈상수 버퍼.
-	ComPtr<ID3D11Buffer> m_pOffsetBoneConstantBuffer = nullptr;			// 뼈상수 버퍼.
-	ComPtr<ID3D11Buffer> m_pAnimeBoneConstantBuffer = nullptr;			// 뼈상수 버퍼.
+	ComPtr<ID3D11Buffer> m_pShadowConstantBuffer = nullptr;			// 그림자 상수 버퍼.
+	ComPtr<ID3D11Buffer> m_pPSVConstantBuffer = nullptr;			// 픽셀셰이더.
 	ComPtr<ID3D11InputLayout> m_pBoneInputLayout = nullptr;		// 입력 레이아웃.
 
 
 
 	XMMATRIX m_BoxManWorld{};
 	XMMATRIX m_SkinningTestWorld{};
+	XMMATRIX m_TableWorld{};
+	XMMATRIX m_Floor{};
 
 	//world 관련 변수 //
 	XMFLOAT3 P_BoxManposition{ -5.0f, 0.0f, 5.0f };
 	XMFLOAT3 P_BoxManrotation{ 0.0f, 0.0f, 0.0f };
-	XMFLOAT3 P_BoxManScale{ 0.01f, 0.01f, 0.01f };
+	XMFLOAT3 P_BoxManScale{ 1.0f, 1.0f, 1.0f };
 
-	XMFLOAT3 P_SkinningTestposition{ 5.0f, 0.0f, 5.0f };
+	XMFLOAT3 P_SkinningTestposition{ 0.0f, 0.0f, 0.0f };
 	XMFLOAT3 P_SkinningTestrotation{ 0.0f, 0.0f, 0.0f };
 	XMFLOAT3 P_SkinningTestScale{ 0.01f, 0.01f, 0.01f };
+
+	XMFLOAT3 P_Tableposition{ 5.0f, -5.0f, 5.0f };
+	XMFLOAT3 P_Tablerotation{ 0.0f, 0.0f, 0.0f };
+	XMFLOAT3 P_TableScale{ 0.01f, 0.01f, 0.01f };
+
+
+	XMFLOAT3 P_Floorposition{ 0.0f, -2.0f, 0.0f };
+	XMFLOAT3 P_Floorrotation{ 0.0f, 0.0f, 0.0f };
+	XMFLOAT3 P_FloorScale{ 2.0f, 0.1f, 2.0f };
+
+	
+	
 
 	double DurationAnime;
 	double TicksPerSecond;
@@ -296,7 +324,49 @@ public:
 	double currentTime2;
 	bool stoptime2 = false;
 
-	ShadowViewSize m_ShadowViewport{ 8192.0f, 8192.0f };
+	D3D11_VIEWPORT m_ShadowViewport{};
 
-	ComPtr<ID3D11DepthStencilView> m_ShadowDepthStencilView{};	// 깊이 타겟뷰
+	ComPtr<ID3D11DepthStencilView> m_ShadowDepthStencilView{};	
+	ComPtr<ID3D11Texture2D> m_pShadowMap{};						
+	ComPtr<ID3D11DepthStencilView> m_pShadowMapDSV{};			//깊이값 기록을 설정하기 위한 객체
+	ComPtr<ID3D11ShaderResourceView> m_pShadowMapSRV{};			//셰이더에서 깊이버퍼를 슬롯에 설정하고 사용하기 위한 객체
+
+	void SetLightVP();
+	void GetFrustumCorners(Vector3 frustumCorners[8]);
+
+	float INITIAL_DISTANCE = 500.0f;
+
+	D3D11_VIEWPORT viewport = {};
+
+	ComPtr<ID3D11RasterizerState> m_pRasterizerShadowBias;			//얇은 검은 줄/얼룩(애크네)을 막기위해 설정
+
+	
+	FloorVertex testFloor[4]{};
+	void SetFloor();
+	UINT FloorIndex[6]{};
+
+	
+	ComPtr <ID3D11Buffer> m_fVertextBuffer{};
+	ComPtr <ID3D11Buffer> m_fIndexBuffer{};
+
+	void RenderFloor(int value);
+
+	void SetHoldLight();
+
+	void DebugMatrix4x4(const char* label, const Matrix& matrix);
+
+	float boxSize = 80.0f;
+	float depthNear = 10.0f;
+	float depthFar = 200.0f;
+
+	void SetDebugLightFrustum();
+	void RenderDebugLightFrustum();
+	ComPtr<ID3D11InputLayout> S_DebugInputLayout;
+
+	using VertexType = DirectX::VertexPositionColor;
+
+	std::unique_ptr<DirectX::CommonStates> m_states;
+	std::unique_ptr<DirectX::BasicEffect> m_effect;
+	std::unique_ptr<DirectX::PrimitiveBatch<VertexType>> m_batch;
+	Microsoft::WRL::ComPtr<ID3D11InputLayout> m_inputLayout;
 };

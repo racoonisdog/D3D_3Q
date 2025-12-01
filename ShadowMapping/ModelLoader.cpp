@@ -139,11 +139,18 @@ bool ModelLoader::Load(HWND hwnd, ID3D11Device* dev, ID3D11DeviceContext* devcon
 		// 3. 리스트를 비우고 MasterAnimation만 남김
 		animelist.clear();
 		animelist["MasterAnimation"] = masterAnim;
+
+
 	}
 
-	Animation* masterAnim = animelist.begin()->second; // MasterAnimation 포인터 획득
-	// 뼈대가 총 70개라면 70에 가까운 숫자가 나와야 합니다.
-	size_t a =  masterAnim->m_Channels.size();
+	if (pScene->HasAnimations())
+	{
+		Animation* masterAnim = animelist.begin()->second; // MasterAnimation 포인터 획득
+		// 뼈대가 총 70개라면 70에 가까운 숫자가 나와야 합니다.
+		size_t a = masterAnim->m_Channels.size();
+	}
+
+
 	int b = 2;
 
 	return true;
@@ -153,33 +160,45 @@ void ModelLoader::DrawSkeletal(ComPtr<ID3D11DeviceContext>& devcon, ComPtr<ID3D1
 {
 	int size = skeletalMeshes.size();
 
+
 	for (size_t i = 0; i < skeletalMeshes.size(); ++i) {
 
-		Material meshMaterial = skeletalMeshes[i].GetMaterial();
-
-		UINT sampleMask = 0xffffffff;
-		//여기에 mesh의 enum클레스 확인후 넘겨줄값 설정 //알파블랜딩 사용여부 및 clip 사용유무까지
-		if (skeletalMeshes[i].TransMode == Transparency::Opaque)
+		if (m_UsePSShader)
 		{
-			devcon->OMSetBlendState(blendOff.Get(), nullptr, 0xFFFFFFFF);
-			meshMaterial.UseClip = 0;
+			Material meshMaterial = skeletalMeshes[i].GetMaterial();
+			skeletalMeshes[i].SetShadowV(m_UsePSShader);
+
+			UINT sampleMask = 0xffffffff;
+			//여기에 mesh의 enum클레스 확인후 넘겨줄값 설정 //알파블랜딩 사용여부 및 clip 사용유무까지
+			if (skeletalMeshes[i].TransMode == Transparency::Opaque)
+			{
+				devcon->OMSetBlendState(blendOff.Get(), nullptr, 0xFFFFFFFF);
+				meshMaterial.UseClip = 0;
+			}
+			else if (skeletalMeshes[i].TransMode == Transparency::Cutout)
+			{
+				devcon->OMSetBlendState(blendOff.Get(), nullptr, 0xFFFFFFFF);
+				meshMaterial.UseClip = 1;
+			}
+			else if (skeletalMeshes[i].TransMode == Transparency::AlphaBlend)
+			{
+				devcon->OMSetBlendState(blendOn.Get(), nullptr, sampleMask);
+				meshMaterial.UseClip = 0;
+			}
+
+
+			devcon->UpdateSubresource(materialB.Get(), 0, nullptr, &meshMaterial, 0, 0);
+			devcon->PSSetConstantBuffers(1, 1, materialB.GetAddressOf());
 		}
-		else if (skeletalMeshes[i].TransMode == Transparency::Cutout)
+		else
 		{
-			devcon->OMSetBlendState(blendOff.Get(), nullptr, 0xFFFFFFFF);
-			meshMaterial.UseClip = 1;
+			skeletalMeshes[i].SetShadowV(m_UsePSShader);
 		}
-		else if (skeletalMeshes[i].TransMode == Transparency::AlphaBlend)
-		{
-			devcon->OMSetBlendState(blendOn.Get(), nullptr, sampleMask);
-			meshMaterial.UseClip = 0;
-		}
-
-
-		devcon->UpdateSubresource(materialB.Get(), 0, nullptr, &meshMaterial, 0, 0);
-		devcon->PSSetConstantBuffers(1, 1, materialB.GetAddressOf());
-
 		skeletalMeshes[i].Draw(devcon);
+	}
+	if (!m_UsePSShader)
+	{
+		devcon->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFF);
 	}
 }
 
@@ -189,31 +208,42 @@ void ModelLoader::DrawStatic(ComPtr<ID3D11DeviceContext>& devcon, ComPtr<ID3D11B
 
 	for (size_t i = 0; i < staticMeshes.size(); ++i) {
 
-		Material meshMaterial = staticMeshes[i].GetMaterial();
-
-		UINT sampleMask = 0xffffffff;
-		//여기에 mesh의 enum클레스 확인후 넘겨줄값 설정 //알파블랜딩 사용여부 및 clip 사용유무까지
-		if (staticMeshes[i].TransMode == Transparency::Opaque)
+		if (m_UsePSShader)
 		{
-			devcon->OMSetBlendState(blendOff.Get(), nullptr, 0xFFFFFFFF);
-			meshMaterial.UseClip = 0;
+			Material meshMaterial = staticMeshes[i].GetMaterial();
+			staticMeshes[i].SetShadowV(m_UsePSShader);
+
+			UINT sampleMask = 0xffffffff;
+			//여기에 mesh의 enum클레스 확인후 넘겨줄값 설정 //알파블랜딩 사용여부 및 clip 사용유무까지
+			if (staticMeshes[i].TransMode == Transparency::Opaque)
+			{
+				devcon->OMSetBlendState(blendOff.Get(), nullptr, 0xFFFFFFFF);
+				meshMaterial.UseClip = 0;
+			}
+			else if (staticMeshes[i].TransMode == Transparency::Cutout)
+			{
+				devcon->OMSetBlendState(blendOff.Get(), nullptr, 0xFFFFFFFF);
+				meshMaterial.UseClip = 1;
+			}
+			else if (staticMeshes[i].TransMode == Transparency::AlphaBlend)
+			{
+				devcon->OMSetBlendState(blendOn.Get(), nullptr, sampleMask);
+				meshMaterial.UseClip = 0;
+			}
+
+
+			devcon->UpdateSubresource(materialB.Get(), 0, nullptr, &meshMaterial, 0, 0);
+			devcon->PSSetConstantBuffers(1, 1, materialB.GetAddressOf());
 		}
-		else if (staticMeshes[i].TransMode == Transparency::Cutout)
+		else
 		{
-			devcon->OMSetBlendState(blendOff.Get(), nullptr, 0xFFFFFFFF);
-			meshMaterial.UseClip = 1;
+			staticMeshes[i].SetShadowV(m_UsePSShader);
 		}
-		else if (staticMeshes[i].TransMode == Transparency::AlphaBlend)
-		{
-			devcon->OMSetBlendState(blendOn.Get(), nullptr, sampleMask);
-			meshMaterial.UseClip = 0;
-		}
-
-
-		devcon->UpdateSubresource(materialB.Get(), 0, nullptr, &meshMaterial, 0, 0);
-		devcon->PSSetConstantBuffers(1, 1, materialB.GetAddressOf());
-
 		staticMeshes[i].Draw(devcon);
+	}
+	if (!m_UsePSShader)
+	{
+		devcon->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFF);
 	}
 }
 
@@ -571,6 +601,7 @@ std::vector<Texture> ModelLoader::loadMaterialTextures(aiMaterial* mat, aiTextur
 				std::string filename = std::string(str.C_Str());
 				filename = directory_ + '\\' + filename;
 				std::wstring filenamews = std::wstring(filename.begin(), filename.end());
+				std::replace(filenamews.begin(), filenamews.end(), '\\', '/');
 				hr = CreateWICTextureFromFile(dev_.Get(), devcon_.Get(), filenamews.c_str(), nullptr, &texture.texture);
 				if (FAILED(hr))
 					MessageBox(hwnd_, L"Texture couldn't be loaded", L"Error!", MB_ICONERROR | MB_OK);

@@ -2,6 +2,8 @@
 
 float4 main(VShaderOut input) : SV_TARGET
 {
+    float shadowFactor = CalculateShadowFactor(input.WorldPos, gShadowMap, samLinear, ShadowView, ShadowProjection);
+    
     //택스쳐의 색 ( 즉 그림 )을 계산하는 식
     float4 albedo = gTexture.Sample(samLinear, input.Tex);
     
@@ -26,12 +28,12 @@ float4 main(VShaderOut input) : SV_TARGET
         float NdotH = saturate(dot(nWS, HalfVector));
         float specP = pow(NdotH, shininess);
 
-        diffuse = albedo.rgb * matdiffuse.rgb * lightdiffuse.rgb * DiffuseFactor;
+        diffuse = albedo.rgb * matdiffuse.rgb * lightdiffuse.rgb * DiffuseFactor * shadowFactor;
 
         //스펙큘러 맵은 보통 회색조(스칼라) 한 채널만 사용하면되기 때문에 r 채널 사용
         //float ksTex = gSpecular.Sample(samLinear, input.Tex).r;
         float ksTex = 1.0f;
-        specular = (matspecular.rgb * lightspecular.rgb) * (specP * ksTex);
+        specular = (matspecular.rgb * lightspecular.rgb) * (specP * ksTex) * shadowFactor;
     }
     float3 textureEmission = gEmission.Sample(samLinear, input.Tex).rgb;
     
@@ -40,5 +42,6 @@ float4 main(VShaderOut input) : SV_TARGET
         clip(alpha - clipValue);
     
     float3 color = ambient + diffuse + specular + textureEmission;
+    
     return float4(color, albedo.a);
 }

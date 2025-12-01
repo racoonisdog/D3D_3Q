@@ -91,6 +91,8 @@ public:
         this->setupMesh(this->dev_.Get());
     }
 
+    void SetShadowV(bool value) { ShadowValue = value; }
+
     void Draw(ComPtr<ID3D11DeviceContext>& devcon) {
 
         UINT stride = sizeof(V);
@@ -103,11 +105,14 @@ public:
         devcon->IASetVertexBuffers(0, 1, VertexBuffer.GetAddressOf(), &stride, &offset);
         devcon->IASetIndexBuffer(IndexBuffer.Get(), DXGI_FORMAT_R32_UINT, 0);
 
-        int textureCount = textures_.size();
-        for (int i = 0; i < textureCount; ++i)
-        {
-            SetTextureType(devcon, i);
-        }
+		if (ShadowValue)
+		{
+			int textureCount = textures_.size();
+			for (int i = 0; i < textureCount; ++i)
+			{
+				SetTextureType(devcon, i);
+			}
+		}
 
         devcon->DrawIndexed(static_cast<UINT>(indices_.size()), 0, 0);
     }
@@ -134,6 +139,8 @@ private:
     ComPtr<ID3D11Buffer> VertexBuffer;
     ComPtr<ID3D11Buffer> IndexBuffer;
     Material material;
+
+    bool ShadowValue = false;
 
     // Functions
     // Initializes all the buffer objects/arrays

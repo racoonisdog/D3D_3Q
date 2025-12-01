@@ -55,6 +55,16 @@ void ShadowMap::SetMatrix()
 	T = XMMatrixTranslation(P_SkinningTestposition.x, P_SkinningTestposition.y, P_SkinningTestposition.z);
 	m_SkinningTestWorld = S * R * T;
 
+	S = XMMatrixScaling(P_TableScale.x, P_TableScale.y, P_TableScale.z);
+	R = XMMatrixRotationRollPitchYaw(P_Tablerotation.x, P_Tablerotation.y, P_Tablerotation.z);
+	T = XMMatrixTranslation(P_Tableposition.x, P_Tableposition.y, P_Tableposition.z);
+	m_TableWorld = S * R * T;
+
+	S = XMMatrixScaling(P_FloorScale.x, P_FloorScale.y, P_FloorScale.z);
+	R = XMMatrixRotationRollPitchYaw(P_Floorrotation.x, P_Floorrotation.y, P_Floorrotation.z);
+	T = XMMatrixTranslation(P_Floorposition.x, P_Floorposition.y, P_Floorposition.z);
+	m_Floor = S * R * T;
+
 	//view(카메라 수치)
 	Vector3 eye = m_CWorld.Translation();
 	Vector3 target = m_CWorld.Translation() + m_CWorld.Backward();
@@ -64,6 +74,7 @@ void ShadowMap::SetMatrix()
 
 	//projection 설정
 	m_Proj = XMMatrixPerspectiveFovLH(fovy, aspect, zNear, zFar);
+
 }
 
 
@@ -118,12 +129,111 @@ void ShadowMap::Update()
 
 void ShadowMap::Render()
 {
-	float color[4] = { 0.0f, 0.5f, 0.5f, 1.0f };
+	//pass1
+	// 사용하지 않는 SRV 해제
+	ID3D11ShaderResourceView* nullSRVs[D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT] = {};
+	m_pDeviceContext->PSSetShaderResources(0, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT, nullSRVs);
+	m_pDeviceContext->VSSetShaderResources(0, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT, nullSRVs);
+	ID3D11ShaderResourceView* nullSRV[1] = { nullptr };
+	m_pDeviceContext->PSSetShaderResources(10, 1, nullSRV);
+	m_pDeviceContext->VSSetShaderResources(10, 1, nullSRV);
 
+	//nullptr인 RTV/DSV를 그림자 맵용으로 설정
+	ID3D11RenderTargetView* rtvs[1] = { nullptr };
+	//RTV를 NULL로 설정하고, DSV는 그림자 맵용 DSV(m_pShadowMapDSV)를 바인딩합니다.
+	m_pDeviceContext->OMSetRenderTargets(1, rtvs, m_pShadowMapDSV.Get());
+
+	//깊이 버퍼 초기화
+	// m_pShadowMapDSV를 초기화
+	m_pDeviceContext->ClearDepthStencilView(m_pShadowMapDSV.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
+
+	//뷰포트 설정 (그림자 맵 해상도에 맞게)
+	m_pDeviceContext->RSSetViewports(1, &m_ShadowViewport); // m_ShadowViewport은 그림자 맵 크기여야 함
+	m_pDeviceContext->OMSetDepthStencilState(m_pDepthStateDefault.Get(), 0);
+	m_pDeviceContext->RSSetState(m_pRasterizerShadowBias.Get());
+	//셰이더 설정 (깊이 전용 셰이더)
+	m_pDeviceContext->PSSetShader(nullptr, nullptr, 0);
+	
+	m_pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST); // 정점을 이어서 그릴 방식 설정.
+	// Draw 호출 (빛 시점)
+	// DrawSkeletal 함수 호출 시, 그리기 위한 World 행렬을 상수 버퍼에 업데이트 및 빛의 상수버퍼도 업데이트
+	//SetHoldLight();
+	SetLightVP();
+	m_pDeviceContext->UpdateSubresource(m_pShadowConstantBuffer.Get(), 0, nullptr, &ShadowVP, 0, 0);
+	m_pDeviceContext->VSSetConstantBuffers(3, 1, m_pShadowConstantBuffer.GetAddressOf());
+	
+	m_pDeviceContext->IASetInputLayout(m_pBoneInputLayout.Get());
+	m_pDeviceContext->VSSetShader(m_pShadowVertexShader.Get(), nullptr, 0);
+
+	PlaySkinningTest->GetFinalMatrices(FinalBoneCS.gBoneMatrices);
+	m_pDeviceContext->UpdateSubresource(m_pBoneConstantBuffer.Get(), 0, nullptr, &FinalBoneCS, 0, 0);
+	XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(m_SkinningTestWorld));
+	m_pDeviceContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constandices, 0, 0);
+
+	m_pDeviceContext->VSSetConstantBuffers(0, 1, &m_pConstantBuffer);
+
+
+	//시간 업데이트 설정
+	float u = GameTimer::m_Instance->DeltaTime();
+	//float t = GameTimer::m_Instance->TotalTime();
+
+	if (!stoptime)
+	{
+		currentTime += (double)u;
+	}
+	PlaySkinningTest->Update(currentTime);
+	PlaySkinningTest->GetFinalMatrices(FinalBoneCS.gBoneMatrices);
+
+	m_pDeviceContext->UpdateSubresource(m_pBoneConstantBuffer.Get(), 0, nullptr, &FinalBoneCS, 0, 0);
+	m_pDeviceContext->VSSetConstantBuffers(2, 1, m_pBoneConstantBuffer.GetAddressOf());
+
+	SkinningTest.get()->SetPSValue(false);
+	SkinningTest.get()->DrawSkeletal(m_pDeviceContext, m_pMaterialBuffer, m_pBlendON, m_pBlendOFF);
+
+
+	XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(m_Floor));
+	m_pDeviceContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constandices, 0, 0);
+
+	m_pDeviceContext->IASetInputLayout(m_pInputLayout);
+	m_pDeviceContext->VSSetShader(m_pVertexShader, nullptr, 0);
+	Box.get()->SetPSValue(false);
+	Box.get()->DrawStatic(m_pDeviceContext, m_pMaterialBuffer, m_pBlendON, m_pBlendOFF);
+
+	//Table.get()->SetPSValue(false);
+	//XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(m_TableWorld));
+	//m_pDeviceContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constandices, 0, 0);
+	//Table.get()->DrawSkeletal(m_pDeviceContext, m_pMaterialBuffer, m_pBlendON, m_pBlendOFF);
+
+
+	//초기화
+	m_pDeviceContext->VSSetShader(nullptr, nullptr, 0);
+	m_pDeviceContext->IASetInputLayout(nullptr);
+	ID3D11Buffer* nullBuffer[1] = { nullptr };
+	UINT zero = 0;
+	//m_pDeviceContext->IASetVertexBuffers(0, 1, { nullptr }, 0, 0);
+	m_pDeviceContext->IASetVertexBuffers(0, 1, nullBuffer, &zero, &zero);
+	//m_pDeviceContext->IASetIndexBuffer(nullptr, DXGI_FORMAT_UNKNOWN, 0);
+	ID3D11Buffer* nullCB[1] = { nullptr };
+	m_pDeviceContext->VSSetConstantBuffers(3, 1, nullCB);
+	m_pDeviceContext->VSSetConstantBuffers(2, 1, nullCB);
+	//
+
+	//RenderDebugLightFrustum();
+
+	//pass2
+	float color[4] = { 0.0f, 0.5f, 0.5f, 1.0f };
+	m_pDeviceContext->OMSetDepthStencilState(m_pDepthStateDefault.Get(), 0);
+
+	m_pDeviceContext->RSSetViewports(1, &viewport);
+
+	m_pDeviceContext->OMSetRenderTargets(1, &m_pRenderTargetView, m_pDepthStencilView);
 	// 컬러 버퍼(RTV) 초기화
 	m_pDeviceContext->ClearRenderTargetView(m_pRenderTargetView, color);
 	//깊이 버퍼초기화
 	m_pDeviceContext->ClearDepthStencilView(m_pDepthStencilView, D3D11_CLEAR_DEPTH, 1.0f, 0);
+
+	m_pDeviceContext->PSSetShaderResources(10, 1, m_pShadowMapSRV.GetAddressOf());
+	
 
 	//상수버퍼 재활용 부분
 	constandices.vLightDir = m_LightDirsEvaluated;
@@ -145,6 +255,8 @@ void ShadowMap::Render()
 	//상수버퍼
 	m_pDeviceContext->VSSetConstantBuffers(0, 1, &m_pConstantBuffer);
 	m_pDeviceContext->PSSetConstantBuffers(0, 1, &m_pConstantBuffer);
+	m_pDeviceContext->VSSetConstantBuffers(3, 1, m_pShadowConstantBuffer.GetAddressOf());
+	m_pDeviceContext->PSSetConstantBuffers(3, 1, m_pShadowConstantBuffer.GetAddressOf());
 
 	//리소스
 	m_pDeviceContext->PSSetShaderResources(0, 1, M_ptexture.GetAddressOf());
@@ -154,9 +266,6 @@ void ShadowMap::Render()
 	m_pDeviceContext->PSSetSamplers(0, 1, &m_pSamplerLinear);
 
 	m_pDeviceContext->RSSetState(m_pRasterizerStateDefault.Get());
-	m_pDeviceContext->OMSetDepthStencilState(m_pDepthStateDefault.Get(), 0);
-
-
 
 
 
@@ -171,18 +280,6 @@ void ShadowMap::Render()
 	m_pDeviceContext->IASetInputLayout(m_pBoneInputLayout.Get());
 
 
-	float t = GameTimer::m_Instance->DeltaTime();
-	//float t = GameTimer::m_Instance->TotalTime();
-
-	if (!stoptime)
-	{
-		currentTime += (double)t;
-	}
-
-	PlaySkinningTest->Update(currentTime);
-
-	PlaySkinningTest->GetFinalMatrices(FinalBoneCS.gBoneMatrices);
-
 	m_pDeviceContext->UpdateSubresource(m_pBoneConstantBuffer.Get(), 0, nullptr, &FinalBoneCS, 0, 0);
 	m_pDeviceContext->VSSetConstantBuffers(2, 1, m_pBoneConstantBuffer.GetAddressOf());
 
@@ -190,40 +287,38 @@ void ShadowMap::Render()
 
 	////skele
 	XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(m_SkinningTestWorld));
-	//XMMATRIX WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, XMMatrixTranspose(m_SkinningTestWorld)));
 	XMMATRIX W = m_SkinningTestWorld;
 	XMMATRIX WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, W));
 	XMStoreFloat4x4(&constandices.worldinverseT, WInvT);
 	m_pDeviceContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constandices, 0, 0);
+	SkinningTest.get()->SetPSValue(true);
 	////
 	SkinningTest.get()->DrawSkeletal(m_pDeviceContext, m_pMaterialBuffer, m_pBlendON, m_pBlendOFF);
 
-	//////
-	//XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(m_BoxManWorld));
-	//WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, XMMatrixTranspose(m_BoxManWorld)));
-	//XMStoreFloat4x4(&constandices.worldinverseT, WInvT);
-	//m_pDeviceContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constandices, 0, 0);
-	//////
-	//BoxMan.get()->DrawShadowMap(m_pDeviceContext, m_pMaterialBuffer, m_pBlendON, m_pBlendOFF);
+	//table
+	/*XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(m_TableWorld));
+	 W = m_TableWorld;
+	 WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, W));
+	XMStoreFloat4x4(&constandices.worldinverseT, WInvT);
+	m_pDeviceContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constandices, 0, 0);
+	Table.get()->SetPSValue(true);
+	Table.get()->DrawSkeletal(m_pDeviceContext, m_pMaterialBuffer, m_pBlendON, m_pBlendOFF);*/
 
 
-	PlayBoxHuman->Update(currentTime);
-	PlayBoxHuman->GetFinalMatrices(FinalBoneCS.gBoneMatrices);
-
-	m_pDeviceContext->UpdateSubresource(m_pBoneConstantBuffer.Get(), 0, nullptr, &FinalBoneCS, 0, 0);
-	m_pDeviceContext->VSSetConstantBuffers(2, 1, m_pBoneConstantBuffer.GetAddressOf());
-
-	XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(m_BoxManWorld));
-	W = m_BoxManWorld;
+	m_pDeviceContext->IASetInputLayout(m_pInputLayout);
+	m_pDeviceContext->VSSetShader(m_pVertexShader, nullptr, 0);
+	// m_pVertexShader가 일반 셰이더여야 함. m_pBoneVertexShader와 혼동 금지.
+	XMStoreFloat4x4(&constandices.world, XMMatrixTranspose(m_Floor));
+	W = m_Floor;
 	WInvT = XMMatrixTranspose(XMMatrixInverse(nullptr, W));
 	XMStoreFloat4x4(&constandices.worldinverseT, WInvT);
 	m_pDeviceContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constandices, 0, 0);
-	////
-	BoxMan.get()->DrawSkeletal(m_pDeviceContext, m_pMaterialBuffer, m_pBlendON, m_pBlendOFF);
-
-
+	Box.get()->SetPSValue(true);
+	Box.get()->DrawStatic(m_pDeviceContext, m_pMaterialBuffer, m_pBlendON, m_pBlendOFF);
+	
 
 	RenderSkyBox();
+	RenderDebugLightFrustum();
 	RenderGUI();
 
 	// Present the information rendered to the back buffer to the front buffer (the screen)
@@ -271,7 +366,7 @@ bool ShadowMap::InitD3D()
 	/*m_pDeviceContext->OMSetRenderTargets(1, &m_pRenderTargetView, NULL);*/
 
 	// 뷰포트 설정.	
-	D3D11_VIEWPORT viewport = {};
+	//D3D11_VIEWPORT viewport = {};
 	viewport.TopLeftX = 0;
 	viewport.TopLeftY = 0;
 	viewport.Width = (float)m_ClientWidth;
@@ -320,16 +415,59 @@ bool ShadowMap::InitD3D()
 	descDSV.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
 	descDSV.Texture2D.MipSlice = 0;
 	HR_T(m_pDevice->CreateDepthStencilView(textureDepthStencil, &descDSV, &m_pDepthStencilView));
-	m_pDeviceContext->OMSetRenderTargets(1, &m_pRenderTargetView, m_pDepthStencilView);
+	//m_pDeviceContext->OMSetRenderTargets(1, &m_pRenderTargetView, m_pDepthStencilView);
 	SAFE_RELEASE(textureDepthStencil);
 
+	//******************
+	//그림자 깊이 버퍼 리소스 정의
+	m_ShadowViewport.TopLeftX = 0.0f;
+	m_ShadowViewport.TopLeftY = 0.0f;
+	m_ShadowViewport.Width = 8192.0f;
+	m_ShadowViewport.Height = 8192.0f;
+	m_ShadowViewport.MinDepth = 0.0f;
+	m_ShadowViewport.MaxDepth = 1.0f;
 
-	D3D11_TEXTURE2D_DESC shasowtexDesc = {};
-	shasowtexDesc.Width = (UINT)m_shadowVieport
+	D3D11_TEXTURE2D_DESC shadowtexDesc = {};
+	shadowtexDesc.Width = (UINT)m_ShadowViewport.Width;
+	shadowtexDesc.Height = (UINT)m_ShadowViewport.Height;
+	shadowtexDesc.MipLevels = 1;
+	shadowtexDesc.ArraySize = 1;
+	shadowtexDesc.Usage = D3D11_USAGE_DEFAULT;
+	shadowtexDesc.Format = DXGI_FORMAT_R32_TYPELESS;
+	//앞에꺼는 깊이 기록용도, 뒤에꺼는 셰이더에서 텍스처 슬롯에 설정용도
+	shadowtexDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE;
+	shadowtexDesc.SampleDesc.Count = 1;
+	shadowtexDesc.SampleDesc.Quality = 0;
+	HR_T(m_pDevice.Get()->CreateTexture2D(&shadowtexDesc, NULL, m_pShadowMap.GetAddressOf()));
+
+	//깊이 스텐실 상태 정의
+	D3D11_DEPTH_STENCIL_VIEW_DESC shadowdescDSV = {};
+	shadowdescDSV.Format = DXGI_FORMAT_D32_FLOAT;
+	shadowdescDSV.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+	//m_pShadowMapDSV -> 깊이값 기록을 설정하기 위한 객체
+	HR_T(m_pDevice.Get()->CreateDepthStencilView(m_pShadowMap.Get(), &shadowdescDSV, m_pShadowMapDSV.GetAddressOf()));
+
+	//깊이 스텐실 뷰 생성
+	D3D11_SHADER_RESOURCE_VIEW_DESC shadowsrvDesc = {};
+	shadowsrvDesc.Format = DXGI_FORMAT_R32_FLOAT;
+	shadowsrvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+	shadowsrvDesc.Texture2D.MipLevels = 1;
+	HR_T(m_pDevice.Get()->CreateShaderResourceView(m_pShadowMap.Get(), &shadowsrvDesc, m_pShadowMapSRV.GetAddressOf()));
 
 
+	//레스터라이저 설정
+	D3D11_RASTERIZER_DESC rs{};
+	rs.FillMode = D3D11_FILL_SOLID;
+	rs.CullMode = D3D11_CULL_BACK;           // 시작은 BACK로. 필요하면 FRONT도 테스트
+	rs.FrontCounterClockwise = FALSE;
+	rs.DepthClipEnable = TRUE;
 
-
+	// Bias 설정 (시작값 예시; 상황에 따라 조정)
+	rs.DepthBias = 1000;                      // 정수. 0~200 사이부터 시작해서 튜닝
+	rs.SlopeScaledDepthBias = 1.0f;          // 0.8 ~ 2.0 근처에서 튜닝
+	rs.DepthBiasClamp = 0.0f;                // 보통 0.0 유지
+	HR_T(m_pDevice->CreateRasterizerState(&rs, m_pRasterizerShadowBias.GetAddressOf()));
+	//******************
 
 	//알파 블랜딩
 	D3D11_BLEND_DESC descBlend = {};
@@ -371,7 +509,10 @@ bool ShadowMap::InitD3D()
 
 	HR_T(m_pDevice->CreateSamplerState(&sampDesc, &m_pSamplerLinear));
 
+	SetFloor();
 
+	SetHoldLight();
+	SetDebugLightFrustum();
 
 	return true;
 }
@@ -413,7 +554,7 @@ bool ShadowMap::InitScene()
 
 	SkinningTest = std::make_shared<ModelLoader>();
 	SkinningTest.get()->SetMergeValue(false);
-	if (!SkinningTest->Load(m_hWnd, m_pDevice.Get(), m_pDeviceContext.Get(), "resource\\Zombie_Run.fbx", 0))
+	if (!SkinningTest->Load(m_hWnd, m_pDevice.Get(), m_pDeviceContext.Get(), "resource\\SkinningTest.fbx", 0))
 	{
 		MessageBox(m_hWnd, L"FBX couldn't be loaded ", NULL, MB_ICONERROR | MB_OK);
 	}
@@ -423,6 +564,21 @@ bool ShadowMap::InitScene()
 	{
 		MessageBox(m_hWnd, L"FBX couldn't be loaded ", NULL, MB_ICONERROR | MB_OK);
 	}
+
+
+	Box = std::make_unique<ModelLoader>();
+	Box.get()->SetMergeValue(false);
+	if (!Box->Load(m_hWnd, m_pDevice.Get(), m_pDeviceContext.Get(), "resource\\Box.fbx", 0))
+	{
+		MessageBox(m_hWnd, L"FBX couldn't be loaded ", NULL, MB_ICONERROR | MB_OK);
+	}
+
+	//Table = std::make_unique<ModelLoader>();
+	//Table.get()->SetMergeValue(false);
+	//if (!Table->Load(m_hWnd, m_pDevice.Get(), m_pDeviceContext.Get(), "resource\\round_wooden_table_01_2k.fbx", 0))
+	//{
+	//	MessageBox(m_hWnd, L"FBX couldn't be loaded ", NULL, MB_ICONERROR | MB_OK);
+	//}
 
 	size_t BoxManSize = BoxMan.get()->GetAnimeName()->size();
 	size_t SkinningTestSize = SkinningTest.get()->GetAnimeName()->size();
@@ -491,11 +647,11 @@ bool ShadowMap::InitScene()
 	cbDesc.ByteWidth = (sizeof(FinalBoneMatrix) + 15) & ~15;;
 	HR_T(hr = m_pDevice->CreateBuffer(&cbDesc, nullptr, m_pBoneConstantBuffer.GetAddressOf()));
 
-	/*cbDesc.ByteWidth = (sizeof(OffsetBoneMatrix) + 15) & ~15;;
-	HR_T(hr = m_pDevice->CreateBuffer(&cbDesc, nullptr, m_pOffsetBoneConstantBuffer.GetAddressOf()));
+	cbDesc.ByteWidth = (sizeof(TransformVP) + 15) & ~15;;
+	HR_T(hr = m_pDevice->CreateBuffer(&cbDesc, nullptr, m_pShadowConstantBuffer.GetAddressOf()));
 
-	cbDesc.ByteWidth = (sizeof(AnimateBoneMatrix) + 15) & ~15;;
-	HR_T(hr = m_pDevice->CreateBuffer(&cbDesc, nullptr, m_pAnimeBoneConstantBuffer.GetAddressOf()));*/
+	cbDesc.ByteWidth = (sizeof(SetPSValue) + 15) & ~15;;
+	HR_T(hr = m_pDevice->CreateBuffer(&cbDesc, nullptr, m_pPSVConstantBuffer.GetAddressOf()));
 
 	return true;
 }
@@ -858,7 +1014,7 @@ void ShadowMap::RenderGUI()
 		ImGui::Text("Direction");
 		ImGui::DragFloat3("Box1", LightDir1, 0.01f, -1.0f + eps_local, 1.0f - eps_local);
 		if (ImGui::Button("Reset##Direction")) {
-			LightDir1[0] = 1.0f; LightDir1[1] = 0.0f; LightDir1[2] = 0.0f;
+			LightDir1[0] = 0.0f; LightDir1[1] = -1.0f; LightDir1[2] = 0.0f;
 		}
 		m_LightDirsEvaluated.x = LightDir1[0]; m_LightDirsEvaluated.y = LightDir1[1]; m_LightDirsEvaluated.z = LightDir1[2];
 
@@ -913,18 +1069,96 @@ void ShadowMap::RenderGUI()
 		ImGui::PopID();
 		ImGui::NewLine();
 
-		// Zelda
-		ImGui::PushID(6);
-		ImGui::Text("BoxMan");
-		ImGui::DragFloat3("Position", &P_BoxManposition.x, 0.05f, -1000.0f, 1000.0f);
-		ImGui::DragFloat3("Rotation", &P_BoxManrotation.x, 0.05f, -1000.0f, 1000.0f);
-		ImGui::DragFloat3("Scale", &P_BoxManScale.x, 0.001f, -1000.0f, 1000.0f);
-		if (ImGui::Button("Reset##BoxMan")) {
-			P_BoxManposition = XMFLOAT3(-5.0f, 0.0f, 5.0f);
-			P_BoxManrotation = XMFLOAT3(0.0f, 0.0f, 0.0f);
-			P_BoxManScale = XMFLOAT3(0.01f, 0.01f, 0.01f);
+		ImGui::PushID(5);
+		ImGui::Text("SetLightProjection");
+		ImGui::DragFloat("boxsize", &boxSize, 0.05f, 0.0f, 1000.0f);
+		ImGui::DragFloat("depthNear", &depthNear, 0.05f, 0.0f, 500.0f);
+		ImGui::DragFloat("depthFar", &depthFar, 0.05f, 0.0f, 2000.0f);
+		if (ImGui::Button("Reset##Projection"))
+		{
+			boxSize = 80.0f;
+			depthNear = 10.0f;
+			depthFar = 200.0f;
 		}
 
+
+
+		ImGui::PopID();
+		ImGui::NewLine();
+
+		ImGui::PushID(6);
+		ImGui::Text("Box");
+		ImGui::DragFloat3("boxsize", &P_Floorposition.x, 0.05f, -500.0f, 500.0f);
+		if (ImGui::Button("Reset##Position"))
+		{
+			P_Floorposition.x = 0.0f;
+			P_Floorposition.y = -2.0f;
+			P_Floorposition.z = 0.0f;
+		}
+
+
+		{
+			ImGui::Begin("Shadow Map Viewer"); // <--- Controller 블록 외부에 새 창 시작
+
+			ImTextureID shadowMapID = (ImTextureID)m_pShadowMapSRV.Get();
+
+			ImVec2 imageSize = ImVec2(256, 256);
+
+			// ImGui::Image 호출
+			ImGui::Image(
+				shadowMapID,
+				imageSize,
+				ImVec2(0, 0),
+				ImVec2(1, 1),
+				ImVec4(1, 1, 1, 1),
+				ImVec4(0, 0, 0, 0)
+			);
+
+			ImGui::Text("Shadow Map Resolution: %.0fx%.0f", imageSize.x, imageSize.y);
+
+			ImGui::End(); // Shadow Map Viewer 창 종료
+		}
+
+		{
+			ImGui::Begin("Matrix Debugger");
+
+			// ----------------------------------------------------
+			// 1. Shadow View 행렬
+			// ----------------------------------------------------
+			ImGui::Text("--- Shadow View Matrix ---");
+			// XMFLOAT4X4 타입의 debugView를 테이블로 출력하는 함수 호출
+			DebugMatrix4x4("ShadowView", ShadowVP.ShadowView);
+
+			ImGui::Separator();
+
+			// ----------------------------------------------------
+			// 2. Shadow Projection 행렬
+			// ----------------------------------------------------
+			ImGui::Text("--- Shadow Projection Matrix ---");
+			DebugMatrix4x4("ShadowProj", ShadowVP.ShadowProjection);
+
+			ImGui::Separator();
+
+			// ----------------------------------------------------
+			// 3. Main Camera View 행렬 (예시: m_CView는 XMFLOAT4X4 타입이라고 가정)
+			// ----------------------------------------------------
+			ImGui::Text("--- Camera View Matrix ---");
+			// 실제 카메라 뷰 행렬 변수를 사용하세요. (예: m_CView)
+			Matrix viewMatrix = m_CWorld.Invert();
+			DebugMatrix4x4("CameraView", viewMatrix);
+
+			ImGui::Separator();
+
+			// ----------------------------------------------------
+			// 4. Main Camera Projection 행렬 (예시: m_CProjection은 XMFLOAT4X4 타입이라고 가정)
+			// ----------------------------------------------------
+			ImGui::Text("--- Camera Projection Matrix ---");
+			// 실제 카메라 프로젝션 행렬 변수를 사용하세요. (예: m_CProjection)
+			Matrix projMatrix = Matrix::CreatePerspectiveFieldOfView(fovy, aspect, zNear, zFar);
+			DebugMatrix4x4("CameraProj", projMatrix);
+
+			ImGui::End();
+		}
 
 		ImGui::PopID();
 
@@ -972,12 +1206,24 @@ bool ShadowMap::InitEffect()
 	// 3. 파이프 라인에 바인딩할 정점 셰이더 생성
 	HR_T(m_pDevice->CreateVertexShader(vertexShaderBuffer->GetBufferPointer(), vertexShaderBuffer->GetBufferSize(), NULL, &m_pVertexShader));
 
+	vertexShaderBuffer.Reset();
+	HR_T(CompileShaderFromFile(L"BasicVertexShader.hlsl", "Shadowmain", "vs_4_0", vertexShaderBuffer.GetAddressOf()));
+	HR_T(m_pDevice->CreateInputLayout(layout, ARRAYSIZE(layout), vertexShaderBuffer->GetBufferPointer(), vertexShaderBuffer->GetBufferSize(), &m_pInputLayout));
+	HR_T(m_pDevice->CreateVertexShader(vertexShaderBuffer->GetBufferPointer(), vertexShaderBuffer->GetBufferSize(), NULL, &m_NormalShadowVertexShader));
+
 	//본 버텍스 셰이더
 	vertexShaderBuffer.Reset();
 	HR_T(CompileShaderFromFile(L"BasicVertexShader.hlsl", "BoneMain", "vs_5_0", vertexShaderBuffer.GetAddressOf()));
 	HR_T(m_pDevice->CreateInputLayout(g_BoneLayout, ARRAYSIZE(g_BoneLayout), vertexShaderBuffer->GetBufferPointer(), vertexShaderBuffer->GetBufferSize(), &m_pBoneInputLayout));
 	HR_T(m_pDevice->CreateVertexShader(vertexShaderBuffer->GetBufferPointer(), vertexShaderBuffer->GetBufferSize(), NULL, &m_pBoneVertexShader));
-	//m_pBoneVertexShader
+
+	//그림자 셰이더
+	vertexShaderBuffer.Reset();
+	HR_T(CompileShaderFromFile(L"BasicVertexShader.hlsl", "Shadow", "vs_5_0", vertexShaderBuffer.GetAddressOf()));
+	HR_T(m_pDevice->CreateInputLayout(g_BoneLayout, ARRAYSIZE(g_BoneLayout), vertexShaderBuffer->GetBufferPointer(), vertexShaderBuffer->GetBufferSize(), &m_pBoneInputLayout));
+	HR_T(m_pDevice->CreateVertexShader(vertexShaderBuffer->GetBufferPointer(), vertexShaderBuffer->GetBufferSize(), NULL, &m_pShadowVertexShader));
+
+
 	// 5. 파이프라인에 바인딩할 픽셀 셰이더 생성
 	ComPtr<ID3DBlob> pixelShaderBuffer = nullptr;
 	HR_T(CompileShaderFromFile(L"BasicPixelShader.hlsl", "main", "ps_4_0", pixelShaderBuffer.GetAddressOf()));
@@ -987,6 +1233,7 @@ bool ShadowMap::InitEffect()
 	pixelShaderBuffer.Reset();
 	HR_T(CompileShaderFromFile(L"BlinnPhong.hlsl", "main", "ps_4_0", pixelShaderBuffer.GetAddressOf()));
 	HR_T(m_pDevice->CreatePixelShader(pixelShaderBuffer->GetBufferPointer(), pixelShaderBuffer->GetBufferSize(), NULL, m_pBlinnPhongShader.GetAddressOf()));
+	
 
 	return true;
 }
@@ -1021,3 +1268,254 @@ void ShadowMap::SetRenderSort()
 	//	});
 }
 
+void ShadowMap::SetLightVP()
+{
+	//기존에 쓰던 lightDir을 그대로 가져온다.
+	XMFLOAT3 lightDirWorld(LightDir1[0], LightDir1[1], LightDir1[2]);
+
+	// 혹시 모를 에러를 위해 정규화
+	XMVECTOR L = XMLoadFloat3(&lightDirWorld);
+	L = XMVector3Normalize(L);
+	XMStoreFloat3(&lightDirWorld, L); // 다시 저장하면 이제 정확히 단위 벡터
+
+	//그림자를 찍고 싶은 씬 중심 (카메라 주변을 비추는 광원으로 만들기 위한 부분)
+	XMFLOAT3 targetWorld(constandices.camPos.x, constandices.camPos.y, constandices.camPos.z);
+	XMVECTOR Target = XMLoadFloat3(&targetWorld);
+
+	//lightDir을 이용해서 가짜 light position(=shadow camera eye) 만들기
+	float lightDistance = 50.0f; // 조절 가능 (ImGui로 튀기면 좋음)
+	XMVECTOR eye = Target - L * lightDistance;
+
+
+	//up 벡터 선택
+	// lightDir이 거의 -Y축이라 up을 (0,1,0) 쓰면 평행에 가까워져서 꼬일 수 있음.
+	// 그래서 Z축을 up으로 쓰는게 안전
+	XMVECTOR up = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
+
+	XMMATRIX viewMatrix = XMMatrixLookAtLH(eye, Target, up);
+
+	//원거리/직교 투영(방향성 광원은 보통 직교 사용)
+
+	XMMATRIX projMatrix = XMMatrixOrthographicOffCenterLH(
+		-boxSize, boxSize,
+		-boxSize, boxSize,
+		depthNear, depthFar
+	);
+
+	//쉐도우용 View/Proj 저장 (행렬은 HLSL에서 column-major라 Transpose해서 보냄)
+	XMStoreFloat4x4(&ShadowVP.ShadowView, XMMatrixTranspose(viewMatrix));
+	XMStoreFloat4x4(&ShadowVP.ShadowProjection, XMMatrixTranspose(projMatrix));
+}
+
+
+void ShadowMap::SetFloor()
+{
+	testFloor[0].pos = { -1, 0, -1 };
+	testFloor[1].pos = { -1, 0, 1 };
+	testFloor[2].pos = { 1, 0, 1 };
+	testFloor[3].pos = { 1, 0, -1 };
+
+	testFloor[0].Norm = { 0, 1, 0 };
+	testFloor[1].Norm = { 0, 1, 0 };
+	testFloor[2].Norm = { 0, 1, 0 };
+	testFloor[3].Norm = { 0, 1, 0 };
+
+	testFloor[0].Tan = { 1, 0, 0 };
+	testFloor[1].Tan = { 1, 0, 0 };
+	testFloor[2].Tan = { 1, 0, 0 };
+	testFloor[3].Tan = { 1, 0, 0 };
+
+	testFloor[0].BiTan = { 0, 0, 1 };
+	testFloor[1].BiTan = { 0, 0, 1 };
+	testFloor[2].BiTan = { 0, 0, 1 };
+	testFloor[3].BiTan = { 0, 0, 1 };
+
+	testFloor[0].Tex = { 0, 1 };
+	testFloor[1].Tex = { 0, 0 };
+	testFloor[2].Tex = { 1, 0 };
+	testFloor[3].Tex = { 1, 1 };
+
+	FloorIndex[0] = { 0 };
+	FloorIndex[1] = { 1 };
+	FloorIndex[2] = { 2 };
+	FloorIndex[3] = { 0 };
+	FloorIndex[4] = { 2 };
+	FloorIndex[5] = { 3 };
+
+
+	D3D11_BUFFER_DESC vbDesc{};
+	vbDesc.Usage = D3D11_USAGE_IMMUTABLE;
+	vbDesc.ByteWidth = sizeof(FloorVertex) * 4;
+	vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+
+	D3D11_SUBRESOURCE_DATA vbData{};
+	vbData.pSysMem = testFloor;
+
+	m_pDevice->CreateBuffer(&vbDesc, &vbData, m_fVertextBuffer.GetAddressOf());
+
+
+	D3D11_BUFFER_DESC ibDesc{};
+	ibDesc.Usage = D3D11_USAGE_IMMUTABLE;
+	ibDesc.ByteWidth = sizeof(UINT) * 6;
+	ibDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+
+	D3D11_SUBRESOURCE_DATA ibData{};
+	ibData.pSysMem = FloorIndex;
+	HR_T(m_pDevice->CreateBuffer(&ibDesc, &ibData, m_fIndexBuffer.GetAddressOf()));
+
+}
+
+void ShadowMap::RenderFloor(int value)
+{
+	UINT stride = sizeof(FloorVertex);
+	UINT offset = 0;
+	m_pDeviceContext->IASetVertexBuffers(0, 1, m_fVertextBuffer.GetAddressOf(), &stride, &offset);
+	m_pDeviceContext->IASetIndexBuffer(m_fIndexBuffer.Get(), DXGI_FORMAT_R32_UINT, 0);
+	m_pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	m_pDeviceContext->IASetInputLayout(m_pInputLayout);
+
+	if( value == 1)
+	{
+		m_pDeviceContext->VSSetShader(m_pVertexShader, nullptr, 0);
+		m_pDeviceContext->PSSetShader(m_pPixelShader, nullptr, 0);
+	}
+	else
+	{
+		m_pDeviceContext->VSSetShader(m_NormalShadowVertexShader.Get(), nullptr, 0);
+		m_pDeviceContext->PSSetShader(nullptr, nullptr, 0);
+	}
+
+	m_pDeviceContext->DrawIndexed(6, 0, 0);
+}
+
+void ShadowMap::SetHoldLight()
+{
+	// 1. 기존에 쓰던 lightDir을 그대로 가져온다.
+	XMFLOAT3 lightDirWorld(LightDir1[0], LightDir1[1], LightDir1[2]);
+
+	// 혹시 모를 에러를 위해 정규화
+	XMVECTOR L = XMLoadFloat3(&lightDirWorld);
+	L = XMVector3Normalize(L);
+	XMStoreFloat3(&lightDirWorld, L); // 다시 저장하면 이제 정확히 단위 벡터
+
+	// 2. 그림자를 찍고 싶은 씬 중심 (타겟)
+	XMFLOAT3 targetWorld(0.0f, 0.0f, 0.0f);
+	XMVECTOR Target = XMLoadFloat3(&targetWorld);
+
+	// 3. lightDir을 이용해서 가짜 light position(=shadow camera eye) 만들기
+	float lightDistance = 50.0f; // 조절 가능 (ImGui로 튀기면 좋음)
+	XMVECTOR eye = Target - L * lightDistance;
+
+
+	// 4. up 벡터 선택
+	// lightDir이 거의 -Y축이라 up을 (0,1,0) 쓰면 평행에 가까워져서 꼬일 수 있음.
+	// 그래서 Z축을 up으로 쓰는게 안전
+	XMVECTOR up = XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
+
+	XMMATRIX viewMatrix = XMMatrixLookAtLH(eye, Target, up);
+
+	// 5. 원거리/직교 투영(방향성 광원은 보통 직교 사용)
+
+	XMMATRIX projMatrix = XMMatrixOrthographicOffCenterLH(
+		-boxSize, boxSize,
+		-boxSize, boxSize,
+		depthNear, depthFar
+	);
+
+	// 6. 쉐도우용 View/Proj 저장 (행렬은 HLSL에서 column-major라 Transpose해서 보냄)
+	XMStoreFloat4x4(&ShadowVP.ShadowView, XMMatrixTranspose(viewMatrix));
+	XMStoreFloat4x4(&ShadowVP.ShadowProjection, XMMatrixTranspose(projMatrix));
+}
+
+
+void ShadowMap::DebugMatrix4x4(const char* label, const Matrix& matrix)
+{
+	DirectX::XMFLOAT4X4 tempMatrix;
+	DirectX::XMStoreFloat4x4(&tempMatrix, matrix);
+
+	if (ImGui::BeginTable(label, 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+	{
+		for (int i = 0; i < 4; i++)
+		{
+			ImGui::TableNextRow();
+			for (int j = 0; j < 4; j++)
+			{
+				ImGui::TableSetColumnIndex(j);
+
+				// tempMatrix의 요소를 출력합니다.
+				float value = tempMatrix.m[i][j];
+
+				// 값을 소수점 4자리까지 출력
+				ImGui::Text("%.4f", value);
+			}
+		}
+		ImGui::EndTable();
+	}
+}
+
+void ShadowMap::SetDebugLightFrustum()
+{
+	m_states = std::make_unique<CommonStates>(m_pDevice.Get());
+	m_batch = std::make_unique < PrimitiveBatch<VertexPositionColor>>(m_pDeviceContext.Get());
+	m_effect = std::make_unique<BasicEffect>(m_pDevice.Get());
+
+	XMMATRIX lightView = XMMatrixTranspose(XMLoadFloat4x4(&ShadowVP.ShadowView));
+	XMMATRIX lightProj = XMMatrixTranspose(XMLoadFloat4x4(&ShadowVP.ShadowProjection));
+
+	m_effect->SetVertexColorEnabled(true);
+	m_effect->SetView(lightView);
+	m_effect->SetProjection(lightProj);
+
+	{
+		void const* shaderByteCode;
+		size_t byteCodeLength;
+
+		m_effect->GetVertexShaderBytecode(&shaderByteCode, &byteCodeLength);
+
+		HR_T(
+			m_pDevice.Get()->CreateInputLayout(
+				VertexPositionColor::InputElements, VertexPositionColor::InputElementCount,
+				shaderByteCode, byteCodeLength,
+				S_DebugInputLayout.ReleaseAndGetAddressOf()));
+	}
+}
+
+void ShadowMap::RenderDebugLightFrustum()
+{
+	//XMMATRIX lightView = (XMLoadFloat4x4(&ShadowVP.ShadowView));
+	//XMMATRIX lightProj = (XMLoadFloat4x4(&ShadowVP.ShadowProjection));
+	
+
+	// 저장돼 있는 건 transpose 상태라고 가정
+	XMMATRIX lightViewT = XMLoadFloat4x4(&ShadowVP.ShadowView);
+	XMMATRIX lightProjT = XMLoadFloat4x4(&ShadowVP.ShadowProjection);
+
+	// 디버그 계산/프러스텀 생성/Effect에는 '원본' 형태로 사용해야 하므로 다시 transpose
+	XMMATRIX lightView = XMMatrixTranspose(lightViewT);
+	XMMATRIX lightProj = XMMatrixTranspose(lightProjT);
+
+
+	m_effect->SetView(m_View);
+	m_effect->SetProjection(m_Proj);
+
+	BoundingFrustum viewFrustum;
+	BoundingFrustum::CreateFromMatrix(viewFrustum, lightProj);
+
+	XMMATRIX invView = XMMatrixInverse(nullptr, lightView);
+	viewFrustum.Transform(viewFrustum, invView);
+
+	m_pDeviceContext->OMSetBlendState(m_states->Opaque(), nullptr, 0xFFFFFFFF);
+	m_pDeviceContext->OMSetDepthStencilState(m_states->DepthNone(), 0);
+	m_pDeviceContext->RSSetState(m_states->CullNone());
+
+	m_effect->Apply(m_pDeviceContext.Get());
+
+	m_pDeviceContext->IASetInputLayout(S_DebugInputLayout.Get());
+
+	m_batch->Begin();
+
+	DX::Draw(m_batch.get(), viewFrustum, Colors::Yellow);
+
+	m_batch->End();
+}
