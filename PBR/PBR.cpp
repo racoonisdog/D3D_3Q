@@ -598,15 +598,8 @@ bool PBR::InitScene()
 	{
 		MessageBox(m_hWnd, L"FBX couldn't be loaded ", NULL, MB_ICONERROR | MB_OK);
 	}
+	
 
-
-
-	//Table = std::make_unique<ModelLoader>();
-	//Table.get()->SetMergeValue(false);
-	//if (!Table->Load(m_hWnd, m_pDevice.Get(), m_pDeviceContext.Get(), "resource\\round_wooden_table_01_2k.fbx", 0))
-	//{
-	//	MessageBox(m_hWnd, L"FBX couldn't be loaded ", NULL, MB_ICONERROR | MB_OK);
-	//}
 
 	size_t BoxManSize = BoxMan.get()->GetAnimeName()->size();
 	size_t SkinningTestSize = SkinningTest.get()->GetAnimeName()->size();
