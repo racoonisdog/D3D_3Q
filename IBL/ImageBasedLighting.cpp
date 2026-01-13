@@ -542,7 +542,7 @@ bool ImageBasedLighting::InitD3D()
 	sampDesc2.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
 	sampDesc2.MinLOD = 0;
 	sampDesc2.MaxLOD = D3D11_FLOAT32_MAX;
-	HR_T(m_pDevice->CreateSamplerState(&sampDesc, m_pSamplerClamp.GetAddressOf()));
+	HR_T(m_pDevice->CreateSamplerState(&sampDesc2, m_pSamplerClamp.GetAddressOf()));
 
 	SetHoldLight();
 	SetDebugLightFrustum();
@@ -597,7 +597,7 @@ bool ImageBasedLighting::InitScene()
 
 	Box = std::make_unique<ModelLoader>();
 	Box.get()->SetMergeValue(false);
-	if (!Box->Load(m_hWnd, m_pDevice.Get(), m_pDeviceContext.Get(), "resource\\Ground.fbx", 0))
+	if (!Box->Load(m_hWnd, m_pDevice.Get(), m_pDeviceContext.Get(), "resource\\EnvironmentCube.fbx", 0))
 	{
 		MessageBox(m_hWnd, L"FBX couldn't be loaded ", NULL, MB_ICONERROR | MB_OK);
 	}

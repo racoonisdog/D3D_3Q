@@ -1,14 +1,11 @@
 <Project>
-  <!-- ==== 경로/트리플릿 공통 설정 ==== -->
   <PropertyGroup>
-    <!-- vcpkg 루트 경로: 필요시 본인 경로로 수정 -->
     <VcpkgRoot>D:\temp\vcpkg</VcpkgRoot>
     
     <TripletStatic>x64-windows-static-md</TripletStatic>
     <TripletDynamic>x64-windows</TripletDynamic>
   </PropertyGroup>
 
-  <!-- ==== 공통: 포함 디렉터리 ==== -->
   <ItemDefinitionGroup>
     <ClCompile>
       <AdditionalIncludeDirectories>
@@ -33,6 +30,11 @@
         directxtex.lib;
         imguid.lib;
         assimp-vc143-mtd.lib;
+		PhysX_64.lib;
+		PhysXCommon_64.lib;
+		PhysXFoundation_64.lib;
+		PhysXExtensions_static_64.lib;
+		PhysXPvdSDK_static_64.lib;
         %(AdditionalDependencies)
       </AdditionalDependencies>
     </Link>
@@ -41,6 +43,9 @@
     <PostBuildEvent>
       <Command>
         xcopy /Y /D "$(VcpkgRoot)\installed\$(TripletDynamic)\debug\bin\assimp-vc143-mtd.dll" "$(OutDir)"
+		xcopy /Y /D "$(VcpkgRoot)\installed\$(TripletDynamic)\bin\PhysX_64.dll" "$(OutDir)"
+		xcopy /Y /D "$(VcpkgRoot)\installed\$(TripletDynamic)\bin\PhysXFoundation_64.dll" "$(OutDir)"
+		xcopy /Y /D "$(VcpkgRoot)\installed\$(TripletDynamic)\bin\PhysXCommon_64.dll" "$(OutDir)"
       </Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
@@ -58,6 +63,11 @@
         directxtex.lib;
         imgui.lib;
         assimp-vc143-mt.lib;
+		PhysX_64.lib;
+		PhysXCommon_64.lib;
+		PhysXFoundation_64.lib;
+		PhysXExtensions_static_64.lib;
+		PhysXPvdSDK_static_64.lib;
         %(AdditionalDependencies)
       </AdditionalDependencies>
     </Link>

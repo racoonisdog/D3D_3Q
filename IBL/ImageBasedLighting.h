@@ -169,10 +169,17 @@ public:
 	//카메라 보정함수
 	void SanitizeCamera(Vector3& eye, Vector3& target, Vector3& up);
 
+	
+	float m_Width = GameApp::m_ClientWidth;
+	float m_height = GameApp::m_ClientHeight;
+
 	//Projection 변수
 	float fovy = XMConvertToRadians(45.0f);    // 라디안 단위 세로 시야각
-	float aspect = 1024.0f / 768.0f;  // width / height
-	float zNear = 0.1f;;   // near plane
+	//float aspect = 1024.0f / 768.0f;  // width / height
+
+	float aspect = m_Width / m_height;
+
+	float zNear = 1.0f;;   // near plane
 	float zFar = 1000.0f;    // far plane
 
 
@@ -328,7 +335,7 @@ public:
 
 	XMFLOAT3 P_Floorposition{ 0.0f, -2.0f, 0.0f };
 	XMFLOAT3 P_Floorrotation{ 0.0f, 0.0f, 0.0f };
-	XMFLOAT3 P_FloorScale{ 0.07f, 0.001f, 0.07f };
+	XMFLOAT3 P_FloorScale{ 0.28f, 0.001f, 0.28f };
 
 	XMFLOAT3 P_Charposition{ 1.0f, 1.0f, 0.0f };
 	XMFLOAT3 P_Charrotation{ 0.0f, 0.0f, 0.0f };

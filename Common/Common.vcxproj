@@ -149,6 +149,7 @@
     <ClInclude Include="ImGUI.h" />
     <ClInclude Include="InputSystem.h" />
     <ClInclude Include="pch.h" />
+    <ClInclude Include="Singleton.hpp" />
     <ClInclude Include="stb_image.h" />
     <ClInclude Include="TimeSystem.h" />
   </ItemGroup>

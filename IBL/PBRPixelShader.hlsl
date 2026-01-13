@@ -37,27 +37,24 @@ float4 main(VShaderOut input) : SV_TARGET
     float metallic;
     float roughness;
     
+    float3 baseColor = albedo;
     
     if (useModelValue == 1)
     {
         metallic = gMetallic.Sample(samLinear, input.Tex).r * m_Metaliic;
         roughness = gRoughness.Sample(samLinear, input.Tex).r * m_Roughness;
+        baseColor *= matdiffuse.rgb;
     }
     else
     {
         metallic = saturate(m_Metaliic);
         roughness = saturate(m_Roughness);
-    }
-    
-    roughness = max(roughness, 0.04f);
-    
-
-    float3 baseColor = albedo;
-
-    if (useModelValue == 0)
-    {
         baseColor = metalcolor;
     }
+    
+    roughness = saturate(roughness);
+    float D_roughness = max(roughness, 0.0004f);
+
     
     
     // F0
@@ -71,7 +68,7 @@ float4 main(VShaderOut input) : SV_TARGET
     const float PBRPI = 3.14159265359f;
     
 
-    float D = DistributionGGX(NdotH, roughness);
+    float D = DistributionGGX(NdotH, D_roughness);
     float3 F = FresnelSchlick(VdotH, f0);
     float G = GemoetrySmithForDirect(NdotL, NdotV, roughness);
     
@@ -126,4 +123,5 @@ float4 main(VShaderOut input) : SV_TARGET
     float3 colorSRGB = pow(colorLinear, 1.0f / 2.2f);
 
     return float4(colorSRGB, alpha); // alpha = albedoSRGB.a
+    
 }
